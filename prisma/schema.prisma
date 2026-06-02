@@ -1,0 +1,722 @@
+// Plot Broker SaaS — multi-tenant schema
+// Every business table carries orgId; queries MUST filter by orgId (enforced via app layer + Supabase RLS)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------- Tenancy ----------
+
+enum OrgPlan {
+  free
+  pro
+  enterprise
+}
+
+enum WhatsAppMode {
+  deeplink     // wa.me URLs only (manual click)
+  business_api // Meta Cloud API automated sends
+  hybrid       // broker chooses per message
+}
+
+model Organization {
+  id            String        @id @default(cuid())
+  name          String
+  slug          String        @unique
+  plan          OrgPlan       @default(free)
+  whatsappMode  WhatsAppMode  @default(deeplink)
+
+  // ---- Geo (lead routing) ----
+  serviceCity        String?     // primary city, e.g. "Bangalore"
+  serviceLat         Float?      // center of service area
+  serviceLng         Float?
+  serviceRadiusKm    Int?    @default(25)  // null = unlimited
+
+  // ---- Notification preferences ----
+  notifyOnPublicLead Boolean @default(true)   // master toggle
+  notifyViaInApp     Boolean @default(true)   // free, always-on
+  notifyViaEmail     Boolean @default(true)   // ~free at low volume
+  notifyViaWhatsApp  Boolean @default(false)  // paid in business_api mode; off by default
+
+  // ---- Per-org spend caps (soft warnings only by default) ----
+  monthlyLlmBudgetUsdCents     Int @default(500)   // $5/mo default
+  monthlyRenderBudgetUsdCents  Int @default(500)
+  monthlyWhatsappBudgetUsdCents Int @default(500)
+
+  // ---- Razorpay billing ----
+  razorpayCustomerId      String?
+  razorpaySubscriptionId  String?
+  // Cached subscription status from Razorpay webhooks: "active" | "paused" | "cancelled" | "halted" | null
+  subscriptionStatus      String?
+  // When current billing period ends (used to grant grace until then on downgrades)
+  subscriptionEndsAt      DateTime?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  users         User[]
+  plots         Plot[]
+  invitations   Invitation[]
+  visits        Visit[]
+  messages      Message[]
+  whatsappConfig WhatsAppConfig?
+  events        AnalyticsEvent[]
+  designs       BuildingDesign[]
+  claimedLeads  BuildingDesign[] @relation("LeadClaimed")
+  notifications Notification[]
+  usageEvents   UsageEvent[]
+  llmCaches     LlmCache[]
+  oauthApps     OAuthApp[]
+}
+
+// ---------- Users & Roles ----------
+
+enum Role {
+  super_admin   // platform owner
+  broker_admin  // owns the brokerage firm
+  broker_agent  // staff under a broker_admin
+  client        // visiting customer
+}
+
+model User {
+  id            String   @id @default(cuid())
+  // Supabase auth user id (links to auth.users)
+  authId        String   @unique
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role          Role
+  name          String
+  email         String?  @unique
+  phone         String   // E.164 format e.g. +919876543210
+  avatarUrl     String?
+  // Only relevant for role=client: which broker_agent invited / owns this client
+  ownerAgentId  String?
+  ownerAgent    User?    @relation("OwnedClients", fields: [ownerAgentId], references: [id])
+  ownedClients  User[]   @relation("OwnedClients")
+
+  // Only meaningful for role=client. Drives the Match Radar feature.
+  // Schema: lib/matching/preferences.ts ClientPreferencesSchema.
+  preferences   Json?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sentInvites      Invitation[] @relation("SentBy")
+  visitsAsClient   Visit[]      @relation("VisitClient")
+  visitsAsAgent    Visit[]      @relation("VisitAgent")
+  sentMessages     Message[]    @relation("MsgSender")
+  receivedMessages Message[]    @relation("MsgRecipient")
+  notifications    Notification[]
+  // OAuth: codes the user authorized + access tokens they hold (personal + app-issued)
+  oauthCodes       AuthorizationCode[]
+  accessTokens     AccessToken[]
+
+  // Native auth back-references (replaces Supabase auth.users)
+  credential       AuthCredential?
+  sessions         Session[]
+  emailVerifications EmailVerification[]
+  passwordResets   PasswordResetToken[]
+
+  // Per-user notification overrides (null = inherit org setting)
+  notifyViaInApp    Boolean?
+  notifyViaEmail    Boolean?
+  notifyViaWhatsApp Boolean?
+
+  // Send-time optimization signal (hour-of-day 0-23 of best engagement)
+  bestSendHourUtc   Int?
+
+  @@unique([orgId, phone])
+  @@index([orgId, role])
+}
+
+// ---------- Plots / Listings ----------
+
+enum PlotStatus {
+  available
+  reserved
+  sold
+  inactive
+}
+
+model Plot {
+  id          String     @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  location    String
+  city        String?
+  lat         Float?
+  lng         Float?
+  sizeSqft    Int?
+  priceInr    Int?       // price in INR (smallest unit not used; whole rupees)
+  status      PlotStatus @default(available)
+  photos      String[]   // URLs in Supabase storage
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  visits      Visit[]
+  designs     BuildingDesign[]
+
+  @@index([orgId, status])
+}
+
+// ---------- Invitations ----------
+
+enum InvitationStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
+model Invitation {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sentById     String
+  sentBy       User     @relation("SentBy", fields: [sentById], references: [id])
+  clientName   String?
+  clientPhone  String   // target phone, before signup
+  clientEmail  String?
+  plotId       String?  // optional pre-selected plot to discuss
+  token        String   @unique
+  status       InvitationStatus @default(pending)
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([orgId, status])
+  @@index([token])
+}
+
+// ---------- Visits ----------
+
+enum VisitStatus {
+  scheduled
+  completed
+  cancelled
+  no_show
+}
+
+model Visit {
+  id           String      @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plotId       String
+  plot         Plot        @relation(fields: [plotId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       User        @relation("VisitClient", fields: [clientId], references: [id])
+  agentId      String
+  agent        User        @relation("VisitAgent", fields: [agentId], references: [id])
+  scheduledAt  DateTime
+  status       VisitStatus @default(scheduled)
+  notes        String?
+  feedback     String?     // post-visit feedback from client/agent
+  rating       Int?        // 1-5 stars from client
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  messages     Message[]
+
+  @@index([orgId, scheduledAt])
+  @@index([clientId])
+}
+
+// ---------- Messages ----------
+
+enum MessageChannel {
+  whatsapp_deeplink  // user opened wa.me link
+  whatsapp_api       // sent via Business Cloud API
+  inapp              // shown only in portal
+}
+
+enum MessageStatus {
+  draft
+  queued
+  sent
+  delivered
+  read
+  failed
+}
+
+model Message {
+  id            String         @id @default(cuid())
+  orgId         String
+  org           Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  visitId       String?
+  visit         Visit?         @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  senderId      String
+  sender        User           @relation("MsgSender", fields: [senderId], references: [id])
+  recipientId   String
+  recipient     User           @relation("MsgRecipient", fields: [recipientId], references: [id])
+  channel       MessageChannel
+  body          String
+  // Provider response: wa.me URL (deeplink) or message id (API)
+  externalRef   String?
+  status        MessageStatus  @default(draft)
+  errorMessage  String?
+  sentAt        DateTime?
+  createdAt     DateTime       @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([recipientId, createdAt])
+}
+
+// ---------- Per-org WhatsApp Business config ----------
+
+model WhatsAppConfig {
+  id                String   @id @default(cuid())
+  orgId             String   @unique
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // Meta Cloud API credentials
+  phoneNumberId     String?
+  accessToken       String?  // store encrypted in production
+  businessAccountId String?
+  webhookVerifyToken String?
+  // Default template for visit reminders, etc.
+  reminderTemplate  String?  @default("Hi {name}, this is a reminder for your visit to {plot} at {time}.")
+  inviteTemplate    String?  @default("Hi {name}, {broker} from {org} invites you to view properties. Sign up: {link}")
+  updatedAt         DateTime @updatedAt
+}
+
+// ---------- Notifications (in-app inbox) ----------
+
+enum NotificationType {
+  public_lead         // new public-lead design in your service area
+  lead_claimed        // someone else claimed a lead you were notified about
+  visit_scheduled
+  visit_reminder
+  system_message      // generic
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId    String   // recipient (broker)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  link      String?  // CTA link target (e.g. /admin/leads)
+  metadata  Json?    // { designId, leadName, ... }
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([orgId, type, createdAt])
+}
+
+// ---------- AI output cache (avoid paying twice for same input) ----------
+
+model DesignCache {
+  id          String   @id @default(cuid())
+  // SHA-256 hash of canonicalized requirements JSON (kind-specific)
+  hash        String
+  kind        String   // "narrative" | "render"
+  // For narrative: the markdown text. For render: the image URL.
+  payload    String   @db.Text
+  // Extra metadata, e.g. render prompt, model version
+  metadata    Json?
+  hits        Int      @default(0)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([kind, hash])
+  @@index([expiresAt])
+}
+
+// ---------- Usage events (cost accounting) ----------
+
+enum UsageKind {
+  llm_tokens
+  render_request
+  whatsapp_message
+  email_send
+}
+
+model UsageEvent {
+  id           String    @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  kind         UsageKind
+  // Cost in USD cents (×100, so 2.4 cents = 240; >0 only if we paid; cache hits = 0)
+  costUsdMicro BigInt    @default(0)    // micro-USD (millionths) for precision
+  // Units billed (tokens, messages, etc.)
+  units        Int       @default(1)
+  metadata     Json?     // { model, hashHit, externalRef, ... }
+  createdAt    DateTime  @default(now())
+
+  @@index([orgId, kind, createdAt])
+}
+
+// ---------- Webhook idempotency (replay protection) ----------
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String   // "razorpay" | "meta_whatsapp" | future
+  externalId  String   // Razorpay event id, Meta message id, etc.
+  payload     Json?    // optional, for debugging
+  processedAt DateTime @default(now())
+
+  @@unique([provider, externalId])
+  @@index([processedAt])
+}
+
+// ---------- Analytics events (append-only) ----------
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type      String   // e.g. 'invitation.sent', 'visit.scheduled', 'message.sent', 'invitation.accepted'
+  actorId   String?  // user id who triggered it
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([orgId, type, createdAt])
+}
+
+// ---------- Architect: building designs ----------
+
+enum DesignSource {
+  broker      // generated from a broker's plot detail page
+  client      // generated by a logged-in client
+  public_lead // generated by anonymous visitor on /design (lead-gen)
+  standalone  // broker created without a plot link
+}
+
+enum DesignStatus {
+  draft
+  generating
+  ready
+  failed
+}
+
+model BuildingDesign {
+  id              String       @id @default(cuid())
+  // org/plot/user are all optional to support public anonymous flow
+  orgId           String?
+  org             Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plotId          String?
+  plot            Plot?        @relation(fields: [plotId], references: [id], onDelete: SetNull)
+  createdById     String?      // null for public anonymous
+  source          DesignSource
+  status          DesignStatus @default(draft)
+
+  // Lead capture fields (used by public flow; also stored for non-public for record-keeping)
+  leadName        String?
+  leadPhone       String?
+  leadEmail       String?
+
+  // Input requirements (validated against Zod schema in lib/architect/requirements.ts)
+  requirements    Json
+
+  // Outputs
+  brief           Json?        // structured design brief (rooms, areas, materials, etc.)
+  narrative       String?      // LLM-generated descriptive text
+  floorPlansSvg   Json?        // [{ floor: 0, label: "Ground", svg: "<svg>..." }, ...]
+  renderImageUrl  String?      // AI-generated render image URL
+  renderPrompt    String?      // the prompt sent to the image model (for debugging/iteration)
+  errorMessage    String?
+
+  // Geo (for lead routing — captured in public wizard)
+  leadCity        String?
+  leadLat         Float?
+  leadLng         Float?
+
+  // Cache reference (when this design reused a previous LLM/render output)
+  llmCacheHit     Boolean   @default(false)
+  renderCacheHit  Boolean   @default(false)
+
+  // Lead nurture
+  followupEmailSentAt    DateTime?  // public-lead follow-up email timestamp (null = not sent)
+  followupEmailVariant   String?    // which A/B subject variant was used ("v1" | "v2" | "v3")
+  followupEmailOpenedAt  DateTime?  // first time the tracking pixel was hit
+  followupEmailClickedAt DateTime?  // first time the design link was clicked
+
+  // Claim/intake lifecycle (only meaningful for source=public_lead)
+  claimedByOrgId    String?       // org that claimed this lead
+  claimedByOrg      Organization? @relation("LeadClaimed", fields: [claimedByOrgId], references: [id], onDelete: SetNull)
+  claimedByAgentId  String?       // specific agent
+  claimedAt         DateTime?
+  invitationId      String?       // Invitation created during claim
+  brokersNotifiedAt DateTime?     // fan-out notification timestamp (idempotency)
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([orgId, createdAt])
+  @@index([plotId])
+  @@index([source, status, createdAt])
+}
+
+// ---------- Auto-provisioned key material ----------
+//
+// Process-wide cryptographic key material, scoped by `kind`.
+// Currently the only consumer is the team-invite token system:
+//   kind = "team_invite"
+//   payload = { signingKey, verifyingKey, encryptKey } (ML-DSA-87 + XChaCha20)
+//
+// On first cold boot when TEAM_INVITE_* env vars are unset, the loader at
+// lib/auth/team-invite-token.ts generates a keypair and upserts a row here.
+// All instances read the same row → multi-instance safe → ML-DSA truly
+// default-on without operator key management.
+//
+// Env vars stay as an override path for explicit rotation / split deploys.
+//
+// Rotation: insert a new row with `version` incremented; loaders use the
+// highest version. Today we always use version=1; future rotation would
+// write version=2 and let in-flight tokens verify against v1 during a
+// grace window.
+model KeyMaterial {
+  id            String   @id @default(cuid())
+  kind          String   // e.g. "team_invite"
+  version       Int      @default(1)
+  signingKey    Bytes
+  verifyingKey  Bytes
+  encryptKey    Bytes
+  createdAt     DateTime @default(now())
+
+  @@unique([kind, version])
+  @@index([kind])
+}
+
+// ---------- LLM response cache ----------
+//
+// Persistent cache for Anthropic-generated outputs (pitches, valuations,
+// future neighborhood briefs). Same (kind, key) returns the exact stored
+// bytes — no LLM call, no spend.
+//
+// Cost lever: a 50-plot × 100-client org has ~5,000 possible (plot, client)
+// pitch combinations. With this table they pay for each once, ever, until
+// the plot's underlying data changes (which flips the sha256 key).
+//
+// Org-scoped so deleting an org cascades these too. `ttlAt` lets us
+// rotate stale valuations (market drift) without a manual purge.
+model LlmCache {
+  id        String   @id @default(cuid())
+  orgId     String?
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  kind      String   // "pitch" | "valuation" | future kinds
+  key       String   // sha256(canonical input), 24-char prefix
+  value     Json
+  // Last access time for LRU-style eviction.
+  hitAt     DateTime @default(now())
+  // When this row becomes stale and the loader should re-generate.
+  ttlAt     DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([kind, key])
+  @@index([orgId, kind])
+  @@index([ttlAt])
+}
+
+// ---------- OAuth 2.0 third-party app authorization ----------
+//
+// Inspired by Zerodha Kite Connect: developer registers an app, end user
+// approves it via a consent screen, app gets a scoped access token.
+//
+// Flow:
+//   1. broker_admin registers an OAuthApp at /dashboard/settings/developer
+//      → receives client_id + client_secret (secret shown ONCE)
+//   2. Third-party app sends user to /oauth/authorize?client_id=...&...
+//   3. Server-rendered consent screen lists requested scopes
+//   4. User approves → AuthorizationCode minted, redirect to app's callback
+//   5. App POSTs to /api/oauth/token with code + client_id + client_secret
+//      → receives an AccessToken (sha256-hashed at rest, 30-day TTL)
+//   6. App calls /api/v1/* with Authorization: Bearer <token>
+//   7. User can revoke any time from /dashboard/settings/integrations
+
+enum OAuthCodeStatus {
+  pending
+  consumed
+  expired
+}
+
+enum AccessTokenStatus {
+  active
+  revoked
+  expired
+}
+
+model OAuthApp {
+  id                String    @id @default(cuid())
+  // Owner org — the broker_admin who registered the app
+  orgId             String
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  homepageUrl       String?
+  iconUrl           String?
+
+  // Public identifier shown in URLs (e.g. "pba_abc123def456")
+  clientId          String    @unique
+  // sha256(client_secret) — raw secret shown to developer ONCE at creation
+  clientSecretHash  String
+
+  // Whitelisted callback URLs. Exact match required at /oauth/authorize.
+  redirectUris      String[]
+  // Scopes a consent request CAN request from this app. Consent never grants more.
+  allowedScopes     String[]
+  // Scopes pre-checked on the consent screen
+  defaultScopes     String[]
+
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  codes             AuthorizationCode[]
+  tokens            AccessToken[]
+
+  @@index([orgId])
+}
+
+model AuthorizationCode {
+  id            String          @id @default(cuid())
+  // The opaque code returned in the redirect_uri ?code=... — sha256 prefix
+  codeHash      String          @unique
+  appId         String
+  app           OAuthApp        @relation(fields: [appId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes        String[]
+  redirectUri   String
+  status        OAuthCodeStatus @default(pending)
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([appId, userId])
+  @@index([expiresAt])
+}
+
+model AccessToken {
+  id            String             @id @default(cuid())
+  // sha256(raw token) — raw token returned to caller ONCE
+  tokenHash     String             @unique
+  // Last 4 chars of the raw token, for UI identification
+  tokenLast4    String
+  // Optional human-friendly name (Personal Access Tokens). Null for OAuth-issued.
+  name          String?
+  // Null for user-minted Personal Access Tokens. Non-null for OAuth grants.
+  appId         String?
+  app           OAuthApp?          @relation(fields: [appId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes        String[]
+  status        AccessTokenStatus  @default(active)
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@index([userId])
+  @@index([appId, userId])
+  @@index([status, expiresAt])
+}
+
+// ---------- Native authentication (replaces Supabase Auth) ----------
+//
+// Self-hosted email/password + TOTP MFA. No third-party identity dependency.
+// Inspired by Zerodha Kite Connect's auth posture: every credential, session,
+// and second-factor lives in our DB. No SSO, no external IdP. Bring-your-own
+// authenticator app (Google Authenticator / 1Password / etc.) for TOTP.
+//
+// Flow:
+//  - Signup: User row + AuthCredential row + EmailVerification row, send email.
+//  - Login: verify scrypt password → if MFA enrolled, ask for code → mint Session.
+//  - Session cookie: random 32-byte token, sha256 stored, 7-day TTL.
+//  - MFA enrollment: generate base32 secret, render QR, user submits code, mark enrolled.
+
+enum SessionStatus {
+  active
+  revoked
+  expired
+}
+
+model AuthCredential {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // scrypt: format `scrypt$N$r$p$saltHex$hashHex` (RFC 7914 params encoded inline so we
+  // can rotate per row without a separate version column).
+  passwordHash    String
+
+  // True once the user clicks the email-verify link. Login is allowed unverified,
+  // but unverified users see a "verify your email" banner.
+  emailVerifiedAt DateTime?
+
+  // TOTP shared secret (base32). Null = MFA not enrolled.
+  mfaSecret       String?
+  mfaEnrolledAt   DateTime?
+
+  // Recovery codes: 8 single-use 10-char codes, sha256-hashed.
+  // Stored as `["sha256hex", ...]`. Replaced when the user regenerates.
+  mfaRecoveryHashes String[]
+
+  // Counters for brute-force rate limiting at the credential layer.
+  failedLoginCount Int      @default(0)
+  lockedUntil      DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Session {
+  id           String        @id @default(cuid())
+  // sha256(raw cookie value). Raw is only ever in the user's cookie store.
+  tokenHash    String        @unique
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // First-party IP / user-agent recorded for /dashboard/settings/security session list.
+  ip           String?
+  userAgent    String?
+  // null = no MFA at this session's creation. True iff MFA was completed during login.
+  mfaVerified  Boolean       @default(false)
+  status       SessionStatus @default(active)
+  lastSeenAt   DateTime      @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
+model EmailVerification {
+  id         String   @id @default(cuid())
+  // sha256(raw token in link)
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The email this token was issued to verify. Stored separately so a user changing
+  // their email mid-flight can't accidentally verify the new one.
+  email      String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip         String?
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}

@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel older runs of the same PR — saves Actions minutes when rapid pushes happen.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Fast feedback: lint + typecheck. Runs in parallel with unit + build.
+  # ───────────────────────────────────────────────────────────────────────────
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - name: TypeScript --noEmit
+        run: npx tsc --noEmit
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Unit suite — pure-function tests. Fast (~2s), no DB needed.
+  # ───────────────────────────────────────────────────────────────────────────
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test
+        env:
+          ENCRYPTION_KEY: "ci-test-key-do-not-use-in-production-32"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Integration suite — exercises API route handlers with a real Postgres.
+  # Skipped in unit job to keep that one fast. Postgres comes from a service
+  # container, so no external infra needed.
+  # ───────────────────────────────────────────────────────────────────────────
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plot_broker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/plot_broker_test"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/plot_broker_test"
+      ENCRYPTION_KEY: "ci-test-key-do-not-use-in-production-32"
+      # Force the HMAC backend in CI so tests don't need ML-DSA keys.
+      TEAM_INVITE_SIGNING_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Push schema to test DB
+        run: npx prisma db push --skip-generate --accept-data-loss
+      - name: Integration tests
+        run: npx vitest run tests/integration
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Production build — catches lints + type errors next/build is stricter about.
+  # ───────────────────────────────────────────────────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      # Use build:ci (wraps `next build` + fails on edge-runtime warnings).
+      # Next prints those warnings then exits 0, so plain `next build` would
+      # ship a bundle that 500s on every request. See scripts/check-edge-runtime.ts.
+      - run: npm run build:ci
+        env:
+          # Build only needs the schema generated; DATABASE_URL accesses are runtime-only.
+          DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
+          NEXT_PUBLIC_SUPABASE_URL: "https://fake.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "fake-anon-key"
+          ENCRYPTION_KEY: "ci-test-key-do-not-use-in-production-32"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # E2E + live a11y — boots the production build and runs Playwright + axe-core
+  # against the public surfaces. Catches WCAG 2.1 AA violations introduced by
+  # any UI change.
+  # ───────────────────────────────────────────────────────────────────────────
+  e2e:
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
+      NEXT_PUBLIC_SUPABASE_URL: "https://fake.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "fake-anon-key"
+      ENCRYPTION_KEY: "ci-test-key-do-not-use-in-production-32"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+      - name: Install Playwright browsers
+        # `--with-deps` adds the system libs Chromium needs. Slow on first run
+        # but the action cache hits keep subsequent runs <30s.
+        run: npx playwright install --with-deps chromium
+      - name: Playwright + axe
+        run: npx playwright test
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # RLS check — verifies every tenant table has Row-Level Security enabled.
+  # Runs against the integration test DB (which we just pushed the schema to).
+  # ───────────────────────────────────────────────────────────────────────────
+  rls:
+    runs-on: ubuntu-latest
+    needs: integration
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plot_broker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/plot_broker_test"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma db push --skip-generate --accept-data-loss
+      - name: Run RLS migrations (if present)
+        run: |
+          if [ -f prisma/migrations/rls.sql ]; then
+            PGPASSWORD=postgres psql -h localhost -U postgres -d plot_broker_test -f prisma/migrations/rls.sql
+          fi
+      - name: Verify RLS coverage
+        run: npm run check:rls
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Secret scan — basic regex sweep for common leaked credential shapes.
+  # Not a substitute for GitHub's push-protection / Trufflehog, but catches the
+  # obvious mistakes (real Razorpay secrets, Supabase service keys, AWS keys).
+  # ───────────────────────────────────────────────────────────────────────────
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history so we can scan the diff against base.
+          fetch-depth: 0
+      - name: Scan diff for high-risk secret patterns
+        run: |
+          set -euo pipefail
+          # Diff range: PR → merge base; push → previous commit.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          # Patterns: each line is `name=regex`. Tune additions here.
+          PATTERNS=(
+            'razorpay_live=rzp_live_[A-Za-z0-9]{14,}'
+            'razorpay_test=rzp_test_[A-Za-z0-9]{14,}'
+            'supabase_service=sb_secret_[A-Za-z0-9_]{20,}'
+            'aws_access=AKIA[0-9A-Z]{16}'
+            'github_pat=ghp_[A-Za-z0-9]{36,}'
+            'github_oauth=gho_[A-Za-z0-9]{36,}'
+            'anthropic_api=sk-ant-[A-Za-z0-9-]{40,}'
+          )
+
+          DIFF=$(git diff "$BASE...$HEAD" -- ':(exclude).env.example' ':(exclude)*.test.ts' || true)
+          FAIL=0
+          for entry in "${PATTERNS[@]}"; do
+            name="${entry%%=*}"
+            pattern="${entry#*=}"
+            if echo "$DIFF" | grep -E "$pattern" >/dev/null; then
+              echo "::error::Suspected $name credential in diff"
+              FAIL=1
+            fi
+          done
+          exit $FAIL

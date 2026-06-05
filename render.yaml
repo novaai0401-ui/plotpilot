@@ -12,7 +12,7 @@ services:
   - type: web
     name: plotpilot
     runtime: node
-    plan: starter # upgrade as needed; "free" sleeps after inactivity
+    plan: free
     region: singapore # closest to India; or oregon/frankfurt
     branch: main
     buildCommand: npm ci && npm run db:generate && npm run build
@@ -111,7 +111,7 @@ services:
   - type: cron
     name: plotpilot-lead-followups
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     branch: main
     schedule: "0 * * * *"
@@ -132,7 +132,7 @@ services:
   - type: cron
     name: plotpilot-visit-reminders
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     branch: main
     schedule: "0 9 * * *"

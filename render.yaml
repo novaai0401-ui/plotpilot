@@ -21,7 +21,10 @@ services:
     plan: starter
     region: singapore # closest to India; or oregon/frankfurt
     branch: main
-    buildCommand: npm ci && npm run db:generate && npm run build
+    # NODE_ENV=production makes `npm ci` skip devDependencies, but the Next.js
+    # build needs them (typescript, tailwindcss, tsx, etc.). --include=dev forces
+    # them in for the build; the runtime still runs as production.
+    buildCommand: npm ci --include=dev && npm run db:generate && npm run build
     startCommand: npm run start
     healthCheckPath: /
     autoDeploy: true

@@ -1,9 +1,15 @@
 # Render Blueprint for PlotPilot (Next.js 14 + Prisma)
 # Docs: https://render.com/docs/blueprint-spec
 #
-# This deploys the Next.js web service plus two scheduled cron jobs that
-# replace the Vercel crons defined in vercel.json. Postgres is hosted on
-# Supabase (set DATABASE_URL / DIRECT_URL), so no Render database is created.
+# This deploys the Next.js web service only. Postgres is hosted on Supabase
+# (set DATABASE_URL / DIRECT_URL), so no Render database is created.
+#
+# The two scheduled jobs from vercel.json (/api/cron/lead-followups hourly,
+# /api/cron/visit-reminders daily 09:00 UTC) are NOT created here to stay under
+# the workspace service limit. Schedule them with a free external scheduler
+# (e.g. cron-job.org) hitting those URLs with header:
+#   Authorization: Bearer <CRON_SECRET>
+# Use the CRON_SECRET value Render generates for the web service below.
 #
 # After first deploy, fill in the secret env vars in the Render dashboard
 # (they are marked `sync: false` below so they are never stored in git).
@@ -105,46 +111,4 @@ services:
       - key: SENTRY_DSN
         sync: false
       - key: NEXT_PUBLIC_SENTRY_DSN
-        sync: false
-
-  # --- Cron: lead follow-ups (hourly) — replaces vercel.json cron ---
-  - type: cron
-    name: plotpilot-lead-followups
-    runtime: node
-    plan: starter
-    region: singapore
-    branch: main
-    schedule: "0 * * * *"
-    buildCommand: npm ci
-    startCommand: >-
-      curl -fsS -H "Authorization: Bearer $CRON_SECRET"
-      "$NEXT_PUBLIC_APP_URL/api/cron/lead-followups"
-    envVars:
-      - key: CRON_SECRET
-        fromService:
-          type: web
-          name: plotpilot
-          envVarKey: CRON_SECRET
-      - key: NEXT_PUBLIC_APP_URL
-        sync: false
-
-  # --- Cron: visit reminders (daily 09:00 UTC) ---
-  - type: cron
-    name: plotpilot-visit-reminders
-    runtime: node
-    plan: starter
-    region: singapore
-    branch: main
-    schedule: "0 9 * * *"
-    buildCommand: npm ci
-    startCommand: >-
-      curl -fsS -H "Authorization: Bearer $CRON_SECRET"
-      "$NEXT_PUBLIC_APP_URL/api/cron/visit-reminders"
-    envVars:
-      - key: CRON_SECRET
-        fromService:
-          type: web
-          name: plotpilot
-          envVarKey: CRON_SECRET
-      - key: NEXT_PUBLIC_APP_URL
         sync: false

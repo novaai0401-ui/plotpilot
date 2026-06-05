@@ -1,0 +1,150 @@
+# Render Blueprint for PlotPilot (Next.js 14 + Prisma)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# This deploys the Next.js web service plus two scheduled cron jobs that
+# replace the Vercel crons defined in vercel.json. Postgres is hosted on
+# Supabase (set DATABASE_URL / DIRECT_URL), so no Render database is created.
+#
+# After first deploy, fill in the secret env vars in the Render dashboard
+# (they are marked `sync: false` below so they are never stored in git).
+
+services:
+  - type: web
+    name: plotpilot
+    runtime: node
+    plan: starter # upgrade as needed; "free" sleeps after inactivity
+    region: singapore # closest to India; or oregon/frankfurt
+    branch: main
+    buildCommand: npm ci && npm run db:generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+
+      # --- Database (Supabase Postgres) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+
+      # --- Supabase ---
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # --- App URL (set to your Render URL or custom domain) ---
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
+      # --- Encryption + team invite keys ---
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: TEAM_INVITE_SIGNING_KEY
+        sync: false
+      - key: TEAM_INVITE_VERIFYING_KEY
+        sync: false
+      - key: TEAM_INVITE_ENCRYPT_KEY
+        sync: false
+      - key: TEAM_INVITE_CHAIN_SEED
+        sync: false
+
+      # --- Cron auth (shared with the cron jobs below) ---
+      - key: CRON_SECRET
+        generateValue: true
+
+      # --- AI ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: REPLICATE_API_TOKEN
+        sync: false
+
+      # --- Rate limiting (Upstash) ---
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+
+      # --- Email (Resend) ---
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+
+      # --- Razorpay ---
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_PLAN_ID_PRO
+        sync: false
+      - key: RAZORPAY_PLAN_ID_ENTERPRISE
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
+        sync: false
+
+      # --- WhatsApp ---
+      - key: WHATSAPP_DEFAULT_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_DEFAULT_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+
+      # --- Sentry (optional) ---
+      - key: SENTRY_DSN
+        sync: false
+      - key: NEXT_PUBLIC_SENTRY_DSN
+        sync: false
+
+  # --- Cron: lead follow-ups (hourly) — replaces vercel.json cron ---
+  - type: cron
+    name: plotpilot-lead-followups
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    schedule: "0 * * * *"
+    buildCommand: npm ci
+    startCommand: >-
+      curl -fsS -H "Authorization: Bearer $CRON_SECRET"
+      "$NEXT_PUBLIC_APP_URL/api/cron/lead-followups"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: plotpilot
+          envVarKey: CRON_SECRET
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
+  # --- Cron: visit reminders (daily 09:00 UTC) ---
+  - type: cron
+    name: plotpilot-visit-reminders
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    schedule: "0 9 * * *"
+    buildCommand: npm ci
+    startCommand: >-
+      curl -fsS -H "Authorization: Bearer $CRON_SECRET"
+      "$NEXT_PUBLIC_APP_URL/api/cron/visit-reminders"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: plotpilot
+          envVarKey: CRON_SECRET
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false

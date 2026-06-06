@@ -40,9 +40,13 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/login") || pathname.startsWith("/signup");
 
   // ---- CSRF guard (double-submit cookie) ----
+  // Next.js Server Actions POST to the page URL and don't carry our
+  // x-csrf-token header; they're protected by Next's own Origin check, so we
+  // exempt them (identified by the Next-Action header) to avoid false 403s.
   const isMutating = MUTATING_METHODS.has(request.method);
+  const isServerAction = request.headers.has("next-action");
   const isCsrfExempt = CSRF_EXEMPT_PREFIXES.some((p) => pathname.startsWith(p));
-  if (isMutating && !isCsrfExempt) {
+  if (isMutating && !isCsrfExempt && !isServerAction) {
     const cookieToken = request.cookies.get(CSRF_COOKIE)?.value;
     const headerToken = request.headers.get(CSRF_HEADER);
     if (!cookieToken || !headerToken || cookieToken !== headerToken) {

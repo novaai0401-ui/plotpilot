@@ -25,7 +25,10 @@ services:
     # build needs them (typescript, tailwindcss, tsx, etc.). --include=dev forces
     # them in for the build; the runtime still runs as production.
     buildCommand: npm ci --include=dev && npm run db:generate && npm run build
-    startCommand: npm run start
+    # Push the Prisma schema to Supabase on every deploy (idempotent) so the
+    # tables exist before the app serves traffic. Without this, the first DB
+    # query (e.g. signup) 500s because the tables were never created.
+    startCommand: npx prisma db push --skip-generate && npm run start
     healthCheckPath: /
     autoDeploy: true
     envVars:

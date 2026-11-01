@@ -1,8 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
 import { t, getLocale } from "@/lib/i18n/server";
 import { LocalePicker } from "@/components/i18n/locale-picker";
 
-export default function HomePage() {
+export default async function HomePage() {
+  // The dashboard layout sends each role on to its own home.
+  if (await getSessionUser()) redirect("/dashboard");
+
   const locale = getLocale();
   const features = [
     { t: t("landing.feature.invite.title"), d: t("landing.feature.invite.desc") },

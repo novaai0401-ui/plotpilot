@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { SignOutButton } from "@/components/sign-out-button";
 import { LocalePicker } from "@/components/i18n/locale-picker";
+import { PortalNav } from "@/components/portal-nav";
 import { t, getLocale } from "@/lib/i18n/server";
 
 const NAV = [
@@ -18,21 +18,19 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="font-bold text-brand">PlotBroker</div>
-          <nav className="flex gap-4 text-sm">
-            {NAV.map((n) => (
-              <Link key={n.href} href={n.href} className="hover:text-brand">
-                {t(n.labelKey)}
-              </Link>
-            ))}
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-bold text-brand">PlotBroker</div>
+            <div className="text-xs text-gray-500 truncate">
+              {t("public.portal.welcome", { name: user.name })}
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-3 text-sm">
+            <LocalePicker current={locale} />
             <SignOutButton />
-          </nav>
+          </div>
         </div>
-        <div className="max-w-4xl mx-auto px-4 pb-2 text-xs text-gray-500 flex items-center justify-between gap-2">
-          <span>{t("public.portal.welcome", { name: user.name })}</span>
-          <LocalePicker current={locale} />
-        </div>
+        <PortalNav items={NAV.map((n) => ({ href: n.href, label: t(n.labelKey) }))} />
       </header>
       <main className="max-w-4xl mx-auto px-4 py-6">{children}</main>
     </div>

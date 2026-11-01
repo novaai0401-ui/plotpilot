@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { copyFileSync, mkdirSync, writeFileSync } from "fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 
 /**
  * Builds a shareable Android APK that opens the deployed site.
@@ -15,10 +15,13 @@ if (!url?.startsWith("https://")) {
 
 const run = (command, cwd) => execSync(command, { cwd, stdio: "inherit" });
 
-// The offline page's retry button needs to know where to go back to.
-writeFileSync("mobile/server-url.js", `window.__appUrl = ${JSON.stringify(url)};\n`);
-
 run("npx cap sync android");
+
+// The offline page's retry button needs to know where to go back to. It is written
+// inline because the shell can't load a separate script while the server is down.
+const offlinePage = "android/app/src/main/assets/public/offline.html";
+writeFileSync(offlinePage, readFileSync(offlinePage, "utf8").replace("__APP_SERVER_URL__", url));
+
 run("node scripts/generate-icons.mjs");
 run(process.platform === "win32" ? ".\\gradlew.bat assembleDebug" : "./gradlew assembleDebug", "android");
 

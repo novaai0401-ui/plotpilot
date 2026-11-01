@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PlotBroker</title>
-  <script src="server-url.js"></script>
   <style>
     body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
       font-family: system-ui, sans-serif; background: #f9fafb; color: #111827; text-align: center; }
@@ -21,7 +20,7 @@
     <p>Can't reach PlotBroker. Check your internet connection.</p>
     <p>PlotBroker से कनेक्ट नहीं हो पा रहा। अपना इंटरनेट कनेक्शन जांचें।</p>
     <p>PlotBroker शी कनेक्ट होता आले नाही. तुमचे इंटरनेट कनेक्शन तपासा.</p>
-    <button onclick="location.href = window.__appUrl">Try again · फिर कोशिश करें · पुन्हा प्रयत्न करा</button>
+    <button onclick="location.href = '__APP_SERVER_URL__'">Try again · फिर कोशिश करें · पुन्हा प्रयत्न करा</button>
   </main>
 </body>
 </html>

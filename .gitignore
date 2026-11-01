@@ -14,5 +14,4 @@ public/workbox-*.js.map
 
 # Android build
 /dist/
-/mobile/server-url.js
 *.tsbuildinfo

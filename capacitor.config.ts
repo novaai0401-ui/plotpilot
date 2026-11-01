@@ -18,6 +18,10 @@ const config: CapacitorConfig = {
     url,
     errorPath: "offline.html",
   },
+  android: {
+    // The site's service worker talks to the server directly, not through Capacitor.
+    resolveServiceWorkerRequests: false,
+  },
 };
 
 export default config;

@@ -5,8 +5,9 @@ import { t, getLocale } from "@/lib/i18n/server";
 import { LocalePicker } from "@/components/i18n/locale-picker";
 
 export default async function HomePage() {
-  // The dashboard layout sends each role on to its own home.
-  if (await getSessionUser()) redirect("/dashboard");
+  // The dashboard layout sends each role on to its own home. A database fault
+  // shouldn't take the public landing page down with it.
+  if (await getSessionUser().catch(() => null)) redirect("/dashboard");
 
   const locale = getLocale();
   const features = [

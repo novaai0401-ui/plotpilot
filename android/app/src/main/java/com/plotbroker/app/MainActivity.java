@@ -6,10 +6,13 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 
 public class MainActivity extends BridgeActivity {
 
@@ -17,6 +20,20 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         WebView webView = getBridge().getWebView();
+
+        // Capacitor re-fetches every page itself and copies cookies across by hand. This app
+        // only shows the live site, so let the WebView load it directly, like a browser.
+        // Other hosts stay with Capacitor, which serves the local offline page.
+        String serverHost = Uri.parse(getBridge().getServerUrl()).getHost();
+        getBridge().setWebViewClient(new BridgeWebViewClient(getBridge()) {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (serverHost != null && serverHost.equalsIgnoreCase(request.getUrl().getHost())) {
+                    return null;
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+        });
 
         // A WebView ignores file downloads unless the app handles them. The session
         // cookie goes along so signed-in exports (PDF, DXF) work and keep their language.

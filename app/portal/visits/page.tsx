@@ -32,7 +32,7 @@ export default async function ClientVisitsPage() {
               {visits.map((v) => (
                 <div
                   key={v.id}
-                  className="px-4 py-3 text-sm flex justify-between items-center gap-4"
+                  className="px-4 py-3 text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4"
                 >
                   <div className="min-w-0">
                     <div className="font-medium flex items-center gap-2">

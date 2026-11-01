@@ -199,7 +199,7 @@ export function DesignViewer({
 
         {/* Room list for active floor (only in 2D view) */}
         {view === "2d" && brief.floors[activeFloor] && (
-          <div className="mt-3 bg-white border rounded-lg overflow-hidden">
+          <div className="mt-3 bg-white border rounded-lg overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>

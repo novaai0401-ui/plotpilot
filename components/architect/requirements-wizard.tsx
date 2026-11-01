@@ -295,7 +295,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {/* STEP 1 — Plot */}
             {activeStep === 1 && (
               <div style={{ display: "grid", gap: 12 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                   <TkxNumberInput
                     label={t("design.wizard.totalArea")}
                     value={totalSqft}
@@ -311,7 +311,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                     onChange={(v) => setFacing(v as string)}
                   />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                   <TkxNumberInput
                     label={t("design.wizard.frontage")}
                     value={frontageFt ?? undefined}
@@ -327,7 +327,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                     max={2000}
                   />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
                   <TkxNumberInput label={t("design.wizard.farCap")} value={maxFAR} onChange={(v) => setMaxFAR(v ?? 2)} step={0.1} min={0.5} max={10} precision={1} />
                   <TkxNumberInput label={t("design.wizard.setbackFront")} value={setbackFront} onChange={(v) => setSetbackFront(v ?? 5)} min={0} max={50} />
                   <TkxNumberInput label={t("design.wizard.setbackRear")} value={setbackRear} onChange={(v) => setSetbackRear(v ?? 3)} min={0} max={50} />
@@ -339,7 +339,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {/* STEP 2 — Layout */}
             {activeStep === 2 && (
               <div style={{ display: "grid", gap: 16 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                   <TkxNumberInput label={t("design.wizard.floors")} value={floors} onChange={(v) => setFloors(v ?? 1)} min={1} max={50} />
                   {projectType === "residential_apartment" && (
                     <TkxNumberInput label={t("design.wizard.unitsPerFloor")} value={unitsPerFloor} onChange={(v) => setUnitsPerFloor(v ?? 1)} min={1} max={50} />
@@ -349,7 +349,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                 {!isCommercial && (
                   <div>
                     <SectionTitle>{t("design.wizard.residentialRooms")} {projectType === "residential_apartment" ? t("design.wizard.perUnit") : ""}</SectionTitle>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
                       <TkxNumberInput label={t("design.wizard.bedrooms")} value={bedrooms} onChange={(v) => setBedrooms(v ?? 0)} min={0} max={10} />
                       <TkxNumberInput label={t("design.wizard.bathrooms")} value={bathrooms} onChange={(v) => setBathrooms(v ?? 0)} min={0} max={10} />
                       <TkxNumberInput label={t("design.wizard.livingRooms")} value={livingRooms} onChange={(v) => setLivingRooms(v ?? 0)} min={0} max={3} />
@@ -362,7 +362,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                 {(isCommercial || isMixed) && (
                   <div>
                     <SectionTitle>{t("design.wizard.commercialSpaces")}</SectionTitle>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
                       <TkxNumberInput label={t("design.wizard.workstations")} value={workstations} onChange={(v) => setWorkstations(v ?? 0)} min={0} max={2000} step={5} />
                       <TkxNumberInput label={t("design.wizard.cabins")} value={cabins} onChange={(v) => setCabins(v ?? 0)} min={0} max={50} />
                       <TkxNumberInput label={t("design.wizard.meetingRooms")} value={meetingRooms} onChange={(v) => setMeetingRooms(v ?? 0)} min={0} max={20} />
@@ -374,7 +374,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
 
                 <div>
                   <SectionTitle>{t("design.wizard.parking")}</SectionTitle>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                     <TkxNumberInput label={t("design.wizard.carParking")} value={cars} onChange={(v) => setCars(v ?? 0)} min={0} max={500} />
                     <TkxNumberInput label={t("design.wizard.bikeParking")} value={bikes} onChange={(v) => setBikes(v ?? 0)} min={0} max={500} />
                   </div>
@@ -403,11 +403,11 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {/* STEP 4 — Style */}
             {activeStep === 4 && (
               <div style={{ display: "grid", gap: 12 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                   <TkxSelect label={t("design.wizard.style")} options={STYLE_OPTIONS} value={style} onChange={(v) => setStyle(v as string)} />
                   <TkxSelect label={t("design.wizard.climate")} options={CLIMATE_OPTIONS} value={climate} onChange={(v) => setClimate(v as string)} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
                   <TkxCard variant="outlined" padding="sm">
                     <TkxCheckbox label={t("design.wizard.vastu")} checked={vastuCompliant} onChange={setVastuCompliant} />
                   </TkxCard>
@@ -434,11 +434,11 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                   <TkxAlert variant="info" title={t("design.wizard.contactTitle")}>
                     {t("design.wizard.contactBody")}
                     <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
                         <TkxInput label={t("common.name")} value={leadName} onChange={(e) => setLeadName(e.target.value)} isRequired />
                         <TkxInput label={t("common.phone")} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} placeholder="+91…" isRequired />
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
                         <TkxInput label={t("common.email")} type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} />
                         <TkxInput label={t("common.city")} value={leadCity} onChange={(e) => setLeadCity(e.target.value)} placeholder={t("design.wizard.cityPlaceholder")} isRequired />
                       </div>

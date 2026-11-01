@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
+import { developerToolsEnabled } from "@/lib/developer-tools";
 import { prisma } from "@/lib/db/prisma";
 import { SCOPES } from "@/lib/auth/oauth-scopes";
 import { DeveloperDashboard } from "./dashboard";
@@ -12,6 +14,7 @@ import { DeveloperDashboard } from "./dashboard";
  *  - Create flow (client_secret shown ONCE inline with copy button)
  */
 export default async function DeveloperPage() {
+  if (!developerToolsEnabled()) notFound();
   const user = await requireUser(["broker_admin"]);
   const apps = await prisma.oAuthApp.findMany({
     where: { orgId: user.orgId, isActive: true },

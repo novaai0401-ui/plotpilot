@@ -1,5 +1,6 @@
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { t } from "@/lib/i18n/server";
 
 export default async function DashboardOverview() {
   const user = await requireUser(BROKER_ROLES);
@@ -14,18 +15,18 @@ export default async function DashboardOverview() {
   ]);
 
   const cards = [
-    { label: "Clients", value: clients },
-    { label: "Available plots", value: plots },
-    { label: "Visits scheduled", value: scheduled },
-    { label: "Visits completed", value: completed },
-    { label: "Pending invites", value: pendingInvites },
+    { label: t("nav.clients"), value: clients },
+    { label: t("broker.home.availablePlots"), value: plots },
+    { label: t("broker.home.visitsScheduled"), value: scheduled },
+    { label: t("broker.home.visitsCompleted"), value: completed },
+    { label: t("broker.home.pendingInvites"), value: pendingInvites },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Welcome back, {user.name.split(" ")[0]}.</h1>
-        <p className="text-gray-500">Here&apos;s how your brokerage is doing today.</p>
+        <h1 className="text-2xl font-bold">{t("broker.home.welcome", { name: user.name.split(" ")[0] })}</h1>
+        <p className="text-gray-500">{t("broker.home.subtitle")}</p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {cards.map((c) => (

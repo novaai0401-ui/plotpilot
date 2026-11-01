@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import {
   TkxAlert,
   TkxBadge,
@@ -9,6 +10,8 @@ import {
   TkxCardBody,
   TkxCardHeader,
 } from "@/components/tkx-dyn";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatInr } from "@/lib/i18n/format";
 
 type Match = {
   clientId: string;
@@ -27,24 +30,24 @@ type Match = {
 
 type FallbackReason = "free_plan" | "no_api_key" | "cap_hit" | undefined;
 
-function fallbackBanner(reason: FallbackReason): { title: string; body: string; variant: "info" | "warning" } | null {
+function fallbackBanner(reason: FallbackReason, t: ReturnType<typeof useT>): { title: string; body: string; variant: "info" | "warning" } | null {
   switch (reason) {
     case "free_plan":
       return {
-        title: "Heuristic — upgrade to Pro for AI-personalized output",
-        body: "Your plan uses deterministic templates. Pro plans use Claude Haiku (~₹0.05/call, cached forever per plot+client combo).",
+        title: t("broker.copilot.fallback.freeTitle"),
+        body: t("broker.copilot.fallback.freeBody"),
         variant: "info",
       };
     case "cap_hit":
       return {
-        title: "Monthly AI budget reached",
-        body: "Falling back to the deterministic template. Increase your cap in settings or wait for the next billing cycle.",
+        title: t("broker.copilot.fallback.capTitle"),
+        body: t("broker.copilot.fallback.capBody"),
         variant: "warning",
       };
     case "no_api_key":
       return {
-        title: "AI unavailable",
-        body: "Set ANTHROPIC_API_KEY in the deploy to enable AI-personalized output.",
+        title: t("broker.copilot.fallback.noKeyTitle"),
+        body: t("broker.copilot.fallback.noKeyBody"),
         variant: "info",
       };
     default:
@@ -70,24 +73,17 @@ type Valuation = {
   };
 };
 
-const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
-const inrShort = (n: number) =>
-  n >= 1_00_00_000
-    ? `₹${(n / 1_00_00_000).toFixed(2)} Cr`
-    : n >= 1_00_000
-      ? `₹${(n / 1_00_000).toFixed(1)} L`
-      : inr(n);
-
 export function CopilotPanel({ plotId }: { plotId: string }) {
+  const t = useT();
   return (
     <section aria-labelledby="copilot-heading" className="space-y-4">
       <header className="flex items-baseline justify-between gap-3">
         <h2 id="copilot-heading" className="text-lg font-semibold flex items-center gap-2">
           <span aria-hidden>✨</span>
-          AI Co-Pilot
+          {t("broker.copilot.title")}
         </h2>
         <span className="text-xs text-gray-500">
-          Auto-runs against every client + market signal for this plot.
+          {t("broker.copilot.tagline")}
         </span>
       </header>
 
@@ -100,6 +96,7 @@ export function CopilotPanel({ plotId }: { plotId: string }) {
 // ─── Match Radar ──────────────────────────────────────────────────────────────
 
 function MatchRadar({ plotId }: { plotId: string }) {
+  const t = useT();
   const [state, setState] = useState<
     | { kind: "idle" }
     | { kind: "loading" }
@@ -133,31 +130,35 @@ function MatchRadar({ plotId }: { plotId: string }) {
   return (
     <TkxCard variant="elevated" padding="md">
       <TkxCardHeader
-        title="🎯 Match Radar"
-        subtitle="Clients in your org scored by fit, ranked by score."
+        title={`🎯 ${t("broker.copilot.radar.title")}`}
+        subtitle={t("broker.copilot.radar.subtitle")}
       />
       <TkxCardBody>
         {state.kind === "loading" && (
-          <div className="text-sm text-gray-500">Scoring clients…</div>
+          <div className="text-sm text-gray-500">{t("broker.copilot.radar.scoring")}</div>
         )}
         {state.kind === "error" && (
-          <TkxAlert variant="danger" title="Couldn't score clients">
+          <TkxAlert variant="danger" title={t("broker.copilot.radar.failed")}>
             {state.message}
           </TkxAlert>
         )}
         {state.kind === "ready" && state.matches.length === 0 && (
-          <TkxAlert variant="info" title="No matches">
+          <TkxAlert variant="info" title={t("broker.copilot.radar.noMatches")}>
             {state.ruledOutCount > 0
-              ? `${state.ruledOutCount} client${state.ruledOutCount === 1 ? "" : "s"} ruled out for being well over budget.`
-              : "No clients in your org yet. Invite some or add their preferences."}
+              ? t(state.ruledOutCount === 1 ? "broker.copilot.radar.ruledOutOne" : "broker.copilot.radar.ruledOutMany", {
+                  count: state.ruledOutCount,
+                })
+              : t("broker.copilot.radar.noClients")}
           </TkxAlert>
         )}
         {state.kind === "ready" && state.matches.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs text-gray-500">
-              {state.matches.length} of {state.totalScored} client
-              {state.totalScored === 1 ? "" : "s"} match.{" "}
-              {state.ruledOutCount > 0 && `(${state.ruledOutCount} ruled out for budget.)`}
+              {t(state.totalScored === 1 ? "broker.copilot.radar.matchCountOne" : "broker.copilot.radar.matchCountMany", {
+                matched: state.matches.length,
+                total: state.totalScored,
+              })}{" "}
+              {state.ruledOutCount > 0 && t("broker.copilot.radar.ruledOutShort", { count: state.ruledOutCount })}
             </p>
             {state.matches.slice(0, 5).map((m) => (
               <MatchRow key={m.clientId} match={m} plotId={plotId} />
@@ -170,6 +171,7 @@ function MatchRadar({ plotId }: { plotId: string }) {
 }
 
 function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [pitch, setPitch] = useState<
     | { kind: "idle" }
@@ -183,7 +185,7 @@ function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
   async function generatePitch() {
     setPitch({ kind: "loading" });
     try {
-      const res = await fetch(`/api/plots/${plotId}/pitch`, {
+      const res = await csrfFetch(`/api/plots/${plotId}/pitch`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ clientId: match.clientId }),
@@ -229,7 +231,7 @@ function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
             <tbody>
               {match.breakdown.map((b) => (
                 <tr key={b.dimension} className="border-b last:border-b-0">
-                  <td className="py-1 pr-2 font-medium capitalize w-24">{b.dimension}</td>
+                  <td className="py-1 pr-2 font-medium capitalize w-24">{t(`broker.copilot.dimension.${b.dimension}`)}</td>
                   <td className="py-1 pr-2 text-gray-600">{b.note}</td>
                   <td className="py-1 text-right tabular-nums text-gray-500">
                     {b.points}/{b.weight}
@@ -242,23 +244,23 @@ function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
           <div className="flex justify-end gap-2 items-center flex-wrap">
             {pitch.kind === "idle" && (
               <TkxButton type="button" variant="outline" size="sm" onClick={generatePitch}>
-                ✨ Generate WhatsApp pitch
+                ✨ {t("broker.copilot.pitch.generate")}
               </TkxButton>
             )}
             {pitch.kind === "loading" && (
-              <TkxButton type="button" variant="outline" size="sm" disabled isLoading loadingText="Generating…">
-                Generating…
+              <TkxButton type="button" variant="outline" size="sm" disabled isLoading loadingText={t("broker.copilot.pitch.generating")}>
+                {t("broker.copilot.pitch.generating")}
               </TkxButton>
             )}
             {pitch.kind === "error" && (
-              <TkxAlert variant="danger" title="Pitch failed">
+              <TkxAlert variant="danger" title={t("broker.copilot.pitch.failed")}>
                 {pitch.m}
               </TkxAlert>
             )}
             {pitch.kind === "ready" && (
               <div className="w-full space-y-2">
                 {pitch.isFallback && (() => {
-                  const b = fallbackBanner(pitch.fallbackReason);
+                  const b = fallbackBanner(pitch.fallbackReason, t);
                   return b ? (
                     <TkxAlert variant={b.variant} title={b.title}>
                       {b.body}
@@ -271,10 +273,10 @@ function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
                 <div className="flex justify-between items-center gap-2">
                   <span className="text-xs text-gray-400">
                     {pitch.cacheHit
-                      ? "Served from cache · no LLM cost"
+                      ? t("broker.copilot.cost.cached")
                       : pitch.isFallback
-                        ? "Template · no LLM cost"
-                        : "Fresh LLM call · cached for 30 days"}
+                        ? t("broker.copilot.cost.template")
+                        : t("broker.copilot.cost.fresh", { days: 30 })}
                   </span>
                   <div className="flex gap-2">
                     <TkxButton
@@ -283,11 +285,11 @@ function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
                       size="sm"
                       onClick={() => navigator.clipboard.writeText(pitch.text)}
                     >
-                      Copy
+                      {t("broker.copilot.pitch.copy")}
                     </TkxButton>
                     <a href={pitch.waMeUrl} target="_blank" rel="noopener noreferrer">
                       <TkxButton type="button" variant="solid" colorScheme="success" size="sm">
-                        Open WhatsApp →
+                        {t("broker.openWhatsApp")} →
                       </TkxButton>
                     </a>
                   </div>
@@ -304,6 +306,7 @@ function MatchRow({ match, plotId }: { match: Match; plotId: string }) {
 // ─── Valuation ────────────────────────────────────────────────────────────────
 
 function Valuation({ plotId }: { plotId: string }) {
+  const t = useT();
   const [state, setState] = useState<
     | { kind: "idle" }
     | { kind: "loading" }
@@ -329,15 +332,15 @@ function Valuation({ plotId }: { plotId: string }) {
   return (
     <TkxCard variant="elevated" padding="md">
       <TkxCardHeader
-        title="💰 AI Valuation"
-        subtitle="Independent estimate of fair-market value with reasoning."
+        title={`💰 ${t("broker.copilot.valuation.title")}`}
+        subtitle={t("broker.copilot.valuation.subtitle")}
       />
       <TkxCardBody>
         {state.kind === "loading" && (
-          <div className="text-sm text-gray-500">Estimating value…</div>
+          <div className="text-sm text-gray-500">{t("broker.copilot.valuation.estimating")}</div>
         )}
         {state.kind === "error" && (
-          <TkxAlert variant="danger" title="Couldn't compute valuation">
+          <TkxAlert variant="danger" title={t("broker.copilot.valuation.failed")}>
             {state.m}
           </TkxAlert>
         )}
@@ -350,6 +353,14 @@ function Valuation({ plotId }: { plotId: string }) {
 }
 
 function ValuationView({ data }: { data: Valuation }) {
+  const t = useT();
+  const locale = useLocale();
+  const inrShort = (n: number) =>
+    n >= 1_00_00_000
+      ? t("broker.copilot.valuation.crore", { amount: (n / 1_00_00_000).toFixed(2) })
+      : n >= 1_00_000
+        ? t("broker.copilot.valuation.lakh", { amount: (n / 1_00_000).toFixed(1) })
+        : formatInr(n, locale);
   const v = data.valuation;
   const confTone =
     v.confidence === "high" ? "success" : v.confidence === "medium" ? "primary" : "warning";
@@ -368,15 +379,20 @@ function ValuationView({ data }: { data: Valuation }) {
         <div>
           <div className="text-2xl font-bold tabular-nums">{inrShort(v.estimatedInr)}</div>
           <div className="text-xs text-gray-500">
-            Range: {inrShort(v.lowEnd)} – {inrShort(v.highEnd)}
-            {v.pricePerSqftInr ? ` · ${inr(v.pricePerSqftInr)}/sqft` : ""}
+            {t("broker.copilot.valuation.range", { low: inrShort(v.lowEnd), high: inrShort(v.highEnd) })}
+            {v.pricePerSqftInr
+              ? ` · ${t("broker.copilot.valuation.perSqft", { price: formatInr(v.pricePerSqftInr, locale) })}`
+              : ""}
           </div>
         </div>
         <div className="flex flex-col gap-1 items-end">
-          <TkxBadge variant={confTone as any}>{v.confidence} confidence</TkxBadge>
+          <TkxBadge variant={confTone as any}>{t(`broker.copilot.valuation.confidence.${v.confidence}`)}</TkxBadge>
           {data.askingInr != null && (
             <TkxBadge variant={askingTone as any}>
-              Asking {inrShort(data.askingInr)} — {v.askingVsEstimate}
+              {t("broker.copilot.valuation.asking", {
+                amount: inrShort(data.askingInr),
+                position: t(`broker.copilot.valuation.position.${v.askingVsEstimate}`),
+              })}
             </TkxBadge>
           )}
         </div>
@@ -387,10 +403,10 @@ function ValuationView({ data }: { data: Valuation }) {
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <div className="text-xs font-semibold uppercase text-emerald-700 mb-1">
-            Premium factors
+            {t("broker.copilot.valuation.premiumFactors")}
           </div>
           {v.premiumFactors.length === 0 ? (
-            <div className="text-xs text-gray-400">None identified.</div>
+            <div className="text-xs text-gray-400">{t("broker.copilot.valuation.noneIdentified")}</div>
           ) : (
             <ul className="text-xs space-y-0.5 list-disc pl-4">
               {v.premiumFactors.map((f, i) => (
@@ -401,10 +417,10 @@ function ValuationView({ data }: { data: Valuation }) {
         </div>
         <div>
           <div className="text-xs font-semibold uppercase text-amber-700 mb-1">
-            Discount factors
+            {t("broker.copilot.valuation.discountFactors")}
           </div>
           {v.discountFactors.length === 0 ? (
-            <div className="text-xs text-gray-400">None identified.</div>
+            <div className="text-xs text-gray-400">{t("broker.copilot.valuation.noneIdentified")}</div>
           ) : (
             <ul className="text-xs space-y-0.5 list-disc pl-4">
               {v.discountFactors.map((f, i) => (
@@ -416,7 +432,7 @@ function ValuationView({ data }: { data: Valuation }) {
       </div>
 
       {v.isFallback && (() => {
-        const b = fallbackBanner(v.fallbackReason);
+        const b = fallbackBanner(v.fallbackReason, t);
         return b ? (
           <TkxAlert variant={b.variant} title={b.title}>
             {b.body}
@@ -426,10 +442,10 @@ function ValuationView({ data }: { data: Valuation }) {
 
       <div className="text-xs text-gray-400">
         {v.cacheHit
-          ? "Served from cache · no LLM cost"
+          ? t("broker.copilot.cost.cached")
           : v.isFallback
-            ? "Heuristic estimate · no LLM cost"
-            : "Fresh LLM call · cached for 60 days"}
+            ? t("broker.copilot.cost.heuristic")
+            : t("broker.copilot.cost.fresh", { days: 60 })}
       </div>
     </div>
   );

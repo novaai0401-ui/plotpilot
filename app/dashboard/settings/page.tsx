@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { planCaps } from "@/lib/plans";
 import { WhatsAppTestButton } from "@/components/settings/whatsapp-test-button";
+import { developerToolsEnabled } from "@/lib/developer-tools";
+import { translate } from "@/lib/i18n/dict";
+import { getLocale, t } from "@/lib/i18n/server";
+import { formatInr } from "@/lib/i18n/format";
 
 async function saveSettings(formData: FormData) {
   "use server";
@@ -34,6 +38,7 @@ async function saveSettings(formData: FormData) {
   const notifyViaInApp = formData.get("notifyViaInApp") === "on";
   const notifyViaEmail = formData.get("notifyViaEmail") === "on";
   const notifyViaWhatsApp = formData.get("notifyViaWhatsApp") === "on";
+  const behaviorTrackingEnabled = formData.get("behaviorTrackingEnabled") === "on";
 
   // Strip "keep existing" sentinel before writing
   const tokenUpdate = accessToken === undefined ? {} : { accessToken };
@@ -50,6 +55,7 @@ async function saveSettings(formData: FormData) {
       notifyViaInApp,
       notifyViaEmail,
       notifyViaWhatsApp,
+      behaviorTrackingEnabled,
       whatsappConfig: {
         upsert: {
           create: { phoneNumberId, inviteTemplate, reminderTemplate, ...tokenCreate },
@@ -69,20 +75,25 @@ export default async function SettingsPage() {
   });
   const readOnly = user.role !== "broker_admin";
   const caps = planCaps(org?.plan ?? "free");
+  const showDeveloperTools = developerToolsEnabled();
+  const locale = getLocale();
+  const [developerIntro, developerBetween, developerRest] = t("account.settings.developerBody").split(
+    /\{clientId\}|\{clientSecret\}/
+  );
 
   return (
     <div className="max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-2xl font-bold">{t("nav.settings")}</h1>
       {readOnly && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded">
-          Only the broker admin can edit organization settings.
+          {t("account.settings.readOnly")}
         </div>
       )}
 
       <form action={saveSettings} className="bg-white border rounded-lg p-6 space-y-4">
         <section>
-          <h2 className="font-semibold mb-2">Organization</h2>
-          <label className="block text-sm font-medium mb-1">Name</label>
+          <h2 className="font-semibold mb-2">{t("common.organization")}</h2>
+          <label className="block text-sm font-medium mb-1">{t("common.name")}</label>
           <input
             name="orgName"
             defaultValue={org?.name}
@@ -90,30 +101,36 @@ export default async function SettingsPage() {
             className="w-full border rounded px-3 py-2 text-sm"
           />
           <div className="mt-3 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Current plan: {caps.label}</strong> · {caps.priceInr === 0 ? "Free" : `₹${caps.priceInr}/mo`}
+            <strong>{t("account.settings.currentPlan", { plan: t(`account.plan.${org?.plan ?? "free"}`) })}</strong> ·{" "}
+            {caps.priceInr === 0
+              ? t("common.free")
+              : t("account.billing.perMonth", { price: formatInr(caps.priceInr, locale) })}
             <br />
-            Includes: {caps.llmNarrative ? "AI narrative ✓" : "rules-only design"}, {caps.aiRender ? "AI render ✓" : "no AI render"}, up to {caps.monthlyDesignsCap} designs/mo, {caps.monthlyLeadAlertsCap} lead alerts/mo.
+            {t("account.settings.includes", {
+              narrative: t(caps.llmNarrative ? "account.settings.aiNarrativeYes" : "account.settings.rulesOnly"),
+              render: t(caps.aiRender ? "account.settings.aiRenderYes" : "account.settings.noAiRender"),
+              designs: caps.monthlyDesignsCap,
+              alerts: caps.monthlyLeadAlertsCap,
+            })}
           </div>
         </section>
 
         <section className="border-t pt-4">
-          <h2 className="font-semibold mb-2">Service area</h2>
-          <p className="text-xs text-gray-500 mb-3">
-            We only notify you about public leads in your area. Leave city blank to be matched to all leads (legacy behaviour).
-          </p>
+          <h2 className="font-semibold mb-2">{t("account.settings.serviceArea")}</h2>
+          <p className="text-xs text-gray-500 mb-3">{t("account.settings.serviceAreaHelp")}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium mb-1">Primary city</label>
+              <label className="block text-sm font-medium mb-1">{t("account.settings.primaryCity")}</label>
               <input
                 name="serviceCity"
                 defaultValue={org?.serviceCity || ""}
-                placeholder="e.g. Bangalore"
+                placeholder={t("account.settings.cityPlaceholder")}
                 disabled={readOnly}
                 className="w-full border rounded px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Radius (km)</label>
+              <label className="block text-sm font-medium mb-1">{t("account.settings.radius")}</label>
               <input
                 type="number"
                 name="serviceRadiusKm"
@@ -128,31 +145,54 @@ export default async function SettingsPage() {
         </section>
 
         <section className="border-t pt-4">
-          <h2 className="font-semibold mb-2">Notification preferences</h2>
-          <p className="text-xs text-gray-500 mb-3">
-            In-app inbox is free. Email is essentially free. WhatsApp sends in Business API mode
-            cost about ₹2 per message — off by default to keep your bill low.
-          </p>
+          <h2 className="font-semibold mb-2">{translate("settings.insights.title", locale)}</h2>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="behaviorTrackingEnabled"
+              defaultChecked={org?.behaviorTrackingEnabled}
+              disabled={readOnly}
+              className="mt-0.5"
+            />
+            <span>{translate("settings.insights.tracking", locale)}</span>
+          </label>
+          <p className="text-xs text-gray-500 mt-2">{translate("settings.insights.notice", locale)}</p>
+        </section>
+
+        <section className="border-t pt-4">
+          <h2 className="font-semibold mb-2">{t("account.settings.notifications")}</h2>
+          <p className="text-xs text-gray-500 mb-3">{t("account.settings.notificationsHelp")}</p>
           <div className="space-y-2 text-sm">
             <label className="flex items-center gap-2">
               <input type="checkbox" name="notifyOnPublicLead" defaultChecked={org?.notifyOnPublicLead} disabled={readOnly} />
-              Receive public-lead notifications (master switch)
+              {t("account.settings.notifyPublicLead")}
             </label>
             <label className="flex items-center gap-2 ml-6">
               <input type="checkbox" name="notifyViaInApp" defaultChecked={org?.notifyViaInApp ?? true} disabled={readOnly} />
-              In-app inbox <span className="text-gray-400 text-xs">— free</span>
+              {t("account.settings.inAppInbox")} <span className="text-gray-400 text-xs">— {t("account.settings.freeNote")}</span>
             </label>
             <label className="flex items-center gap-2 ml-6">
               <input type="checkbox" name="notifyViaEmail" defaultChecked={org?.notifyViaEmail ?? true} disabled={readOnly} />
-              Email <span className="text-gray-400 text-xs">— ~free at low volume</span>
+              {t("common.email")} <span className="text-gray-400 text-xs">— {t("account.settings.emailCostNote")}</span>
             </label>
             <label className="flex items-center gap-2 ml-6">
               <input type="checkbox" name="notifyViaWhatsApp" defaultChecked={org?.notifyViaWhatsApp ?? false} disabled={readOnly || !caps.whatsappBusinessApi} />
-              WhatsApp <span className="text-gray-400 text-xs">{caps.whatsappBusinessApi ? "— ~₹2/msg" : "— upgrade to Enterprise"}</span>
+              {t("channel.whatsapp_deeplink")} <span className="text-gray-400 text-xs">— {t(caps.whatsappBusinessApi ? "account.settings.whatsappCostNote" : "account.settings.upgradeToEnterprise")}</span>
             </label>
           </div>
         </section>
 
+        {!showDeveloperTools && (
+          // Keep the saved WhatsApp setup intact while its controls are hidden.
+          <>
+            <input type="hidden" name="whatsappMode" value={org?.whatsappMode} />
+            <input type="hidden" name="phoneNumberId" value={org?.whatsappConfig?.phoneNumberId || ""} />
+            <input type="hidden" name="accessToken" value={org?.whatsappConfig?.accessToken ? "******" : ""} />
+          </>
+        )}
+
+        {showDeveloperTools && (
+        <>
         <section className="border-t pt-4">
           <h2 className="font-semibold mb-2">WhatsApp</h2>
           <p className="text-xs text-gray-500 mb-3">
@@ -218,14 +258,16 @@ export default async function SettingsPage() {
           </p>
           {!readOnly && <WhatsAppTestButton />}
         </section>
+        </>
+        )}
 
         <section className="border-t pt-4">
-          <h2 className="font-semibold mb-2">Message templates</h2>
+          <h2 className="font-semibold mb-2">{t("account.settings.templates")}</h2>
           <p className="text-xs text-gray-500 mb-3">
-            Variables: <code>{"{name}"}</code> <code>{"{broker}"}</code> <code>{"{org}"}</code>{" "}
+            {t("account.settings.templateVariables")} <code>{"{name}"}</code> <code>{"{broker}"}</code> <code>{"{org}"}</code>{" "}
             <code>{"{link}"}</code> <code>{"{plot}"}</code> <code>{"{time}"}</code>
           </p>
-          <label className="block text-sm font-medium mb-1">Invitation template</label>
+          <label className="block text-sm font-medium mb-1">{t("account.settings.inviteTemplate")}</label>
           <textarea
             name="inviteTemplate"
             rows={2}
@@ -233,7 +275,7 @@ export default async function SettingsPage() {
             disabled={readOnly}
             className="w-full border rounded px-3 py-2 text-sm mb-3"
           />
-          <label className="block text-sm font-medium mb-1">Visit reminder template</label>
+          <label className="block text-sm font-medium mb-1">{t("account.settings.reminderTemplate")}</label>
           <textarea
             name="reminderTemplate"
             rows={2}
@@ -244,65 +286,62 @@ export default async function SettingsPage() {
         </section>
 
         {!readOnly && (
-          <button className="bg-brand text-white px-4 py-2 rounded text-sm">Save settings</button>
+          <button className="bg-brand text-white px-4 py-2 rounded text-sm">{t("account.settings.save")}</button>
         )}
       </form>
 
       <section className="bg-white border rounded-lg p-6">
-        <h2 className="font-semibold mb-2">Data export &amp; portability</h2>
-        <p className="text-sm text-gray-600 mb-3">
-          Download your clients, plots, visits, messages, and designs as CSV. Useful for backups,
-          accounting reconciliation, or fulfilling a DPDP/GDPR data-subject access request.
-        </p>
+        <h2 className="font-semibold mb-2">{t("account.settings.exportTitle")}</h2>
+        <p className="text-sm text-gray-600 mb-3">{t("account.settings.exportBody")}</p>
         <a
           href="/dashboard/settings/data-export"
           className="inline-block text-sm px-4 py-2 border rounded hover:bg-gray-50"
         >
-          Open data export →
+          {t("account.settings.exportOpen")}
         </a>
       </section>
 
-      <section className="bg-white border rounded-lg p-6">
-        <h2 className="font-semibold mb-2">Authorized apps</h2>
-        <p className="text-sm text-gray-600 mb-3">
-          Third-party apps you've granted access to your PlotBroker account. Revoke any time.
-        </p>
-        <a
-          href="/dashboard/settings/integrations"
-          className="inline-block text-sm px-4 py-2 border rounded hover:bg-gray-50"
-        >
-          Open authorized apps →
-        </a>
-      </section>
-
-      {!readOnly && (
+      {showDeveloperTools && (
         <section className="bg-white border rounded-lg p-6">
-          <h2 className="font-semibold mb-2">Developer · OAuth apps</h2>
+          <h2 className="font-semibold mb-2">{t("account.settings.authorizedApps")}</h2>
+          <p className="text-sm text-gray-600 mb-3">{t("account.settings.authorizedAppsBody")}</p>
+          <a
+            href="/dashboard/settings/integrations"
+            className="inline-block text-sm px-4 py-2 border rounded hover:bg-gray-50"
+          >
+            {t("account.settings.authorizedAppsOpen")}
+          </a>
+        </section>
+      )}
+
+      {showDeveloperTools && !readOnly && (
+        <section className="bg-white border rounded-lg p-6">
+          <h2 className="font-semibold mb-2">{t("account.settings.developerTitle")}</h2>
           <p className="text-sm text-gray-600 mb-3">
-            Register third-party apps that integrate with PlotBroker. Manage{" "}
-            <code>client_id</code> / <code>client_secret</code> and allowed scopes.
+            {developerIntro}
+            <code>client_id</code>
+            {developerBetween}
+            <code>client_secret</code>
+            {developerRest}
           </p>
           <a
             href="/dashboard/settings/developer"
             className="inline-block text-sm px-4 py-2 border rounded hover:bg-gray-50"
           >
-            Open developer dashboard →
+            {t("account.settings.developerOpen")}
           </a>
         </section>
       )}
 
       {!readOnly && (
         <section className="bg-white border border-red-200 rounded-lg p-6">
-          <h2 className="font-semibold mb-2 text-red-900">Danger zone</h2>
-          <p className="text-sm text-gray-600 mb-3">
-            Permanently delete this organization and every record attached to it. Required for
-            DPDPA / GDPR data-erasure requests.
-          </p>
+          <h2 className="font-semibold mb-2 text-red-900">{t("account.danger.title")}</h2>
+          <p className="text-sm text-gray-600 mb-3">{t("account.settings.dangerBody")}</p>
           <a
             href="/dashboard/settings/danger"
             className="inline-block text-sm px-4 py-2 border border-red-300 text-red-700 rounded hover:bg-red-50"
           >
-            Open danger zone →
+            {t("account.settings.dangerOpen")}
           </a>
         </section>
       )}

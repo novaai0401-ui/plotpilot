@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Requirements } from "./requirements";
 import type { DesignBrief } from "./rules";
 import { getCachedNarrative, setCachedNarrative } from "./design-cache";
+import { fallbackNarrative } from "./fallback-narrative";
+import type { Locale } from "@/lib/i18n/dict";
 import { logUsage } from "@/lib/usage";
 
 /**
@@ -15,27 +17,40 @@ import { logUsage } from "@/lib/usage";
 
 const MODEL = "claude-sonnet-4-5";
 
+const LANGUAGE_NAMES: Record<Locale, string> = {
+  en: "English",
+  hi: "Hindi, in Devanagari script",
+  mr: "Marathi, in Devanagari script",
+};
+
 export type NarrativeResult = {
   text: string;
   cacheHit: boolean;
   costMicroUsd: number;
+  fallback?: boolean;
 };
 
 export async function generateNarrative(
   req: Requirements,
   brief: DesignBrief,
-  orgId?: string | null
+  orgId?: string | null,
+  locale: Locale = "en"
 ): Promise<NarrativeResult> {
+  const fallback = (): NarrativeResult => ({
+    text: fallbackNarrative(req, brief, "en"),
+    cacheHit: false,
+    costMicroUsd: 0,
+    fallback: true,
+  });
+
   // Cache first — same requirements pattern within 30 days = zero cost
-  const cached = await getCachedNarrative(req);
+  const cached = await getCachedNarrative(req, locale);
   if (cached) {
     if (orgId) await logUsage(orgId, "llm_tokens", { freeOfCharge: true, metadata: { cache: "hit" } });
     return { text: cached, cacheHit: true, costMicroUsd: 0 };
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { text: fallbackNarrative(req, brief), cacheHit: false, costMicroUsd: 0 };
-  }
+  if (!process.env.ANTHROPIC_API_KEY) return fallback();
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -47,7 +62,7 @@ Your job is to translate this into a warm, professional 400-600 word narrative t
 3. Personalized recommendations the client should consider beyond what's in the brief (1 paragraph).
 4. Three actionable next steps.
 
-Write in clear, jargon-light English. Use markdown headings (## Overview, ## Layout & flow, ## Recommendations, ## Next steps).
+Write in clear, jargon-light language, in the language the user message asks for. Use four markdown headings: ## Overview, ## Layout & flow, ## Recommendations, ## Next steps, with the headings written in that same language.
 Do NOT repeat the raw numbers/tables — the user already sees those. Focus on *why* and *how it feels to live/work in*.`;
 
   const userMessage = `## Requirements
@@ -74,7 +89,7 @@ ${JSON.stringify(
 )}
 \`\`\`
 
-Write the narrative now.`;
+Write the narrative now, entirely in ${LANGUAGE_NAMES[locale]}.`;
 
   try {
     // Cache the system prompt — same for every generation. `cache_control` is a beta
@@ -89,7 +104,8 @@ Write the narrative now.`;
       messages: [{ role: "user", content: userMessage }],
     });
     const block = res.content.find((b) => b.type === "text");
-    const text = block && block.type === "text" ? block.text : fallbackNarrative(req, brief);
+    if (!block || block.type !== "text") return fallback();
+    const text = block.text;
 
     // Cost accounting from actual usage
     const inputTok = (res.usage as any)?.input_tokens || 0;
@@ -98,11 +114,16 @@ Write the narrative now.`;
     const costMicroUsd = inputTok * 3 + outputTok * 15;
 
     // Cache + usage logging
-    await setCachedNarrative(req, text, {
-      model: MODEL,
-      inputTok,
-      outputTok,
-    });
+    await setCachedNarrative(
+      req,
+      text,
+      {
+        model: MODEL,
+        inputTok,
+        outputTok,
+      },
+      locale
+    );
     if (orgId) {
       await logUsage(orgId, "llm_tokens", {
         units: inputTok + outputTok,
@@ -113,42 +134,6 @@ Write the narrative now.`;
     return { text, cacheHit: false, costMicroUsd };
   } catch (e: any) {
     console.error("[architect] LLM narrative failed:", e?.message || e);
-    return { text: fallbackNarrative(req, brief), cacheHit: false, costMicroUsd: 0 };
+    return fallback();
   }
-}
-
-function fallbackNarrative(req: Requirements, brief: DesignBrief): string {
-  const style = req.preferences.style;
-  const type =
-    {
-      residential_house: "home",
-      residential_apartment: "apartment building",
-      commercial_office: "office space",
-      commercial_retail: "retail space",
-      mixed_use: "mixed-use building",
-    }[req.projectType] || "building";
-
-  return `## Overview
-A ${style} ${type} of ${brief.summary.plannedBuiltUpSqft} sqft across ${brief.summary.floors} floor${
-    brief.summary.floors > 1 ? "s" : ""
-  } on a ${brief.summary.totalSqftPlot} sqft plot. The design prioritizes practical room sizing within local FAR constraints (${brief.summary.farUsedPct}% used).
-
-## Layout & flow
-The ground floor anchors the building with common-use spaces; upper floors stack private rooms. Setbacks of ${req.plot.setbackFrontFt}ft front and ${req.plot.setbackSideFt}ft sides preserve light and ventilation on all faces. ${
-    req.preferences.vastuCompliant ? "Room positions follow Vastu directional principles." : ""
-  }
-
-## Recommendations
-Consider upgrading windows to double-glazed UPVC for thermal performance. ${
-    req.amenities.solar ? "" : "A 3 kW rooftop solar array would offset ~60% of monthly grid usage."
-  } ${
-    req.amenities.rainwater ? "" : "Add rainwater harvesting — pays back within 4 years in most metros."
-  }
-
-## Next steps
-1. Confirm local bylaw setbacks and FAR with the municipal authority before locking the layout.
-2. Get 2-3 structural engineer quotes against this room list.
-3. Decide finishes (flooring, paint, fixtures) — this drives 20-30% of total cost.
-
-_AI narrative is currently disabled (no ANTHROPIC_API_KEY set). The above is a deterministic fallback._`;
 }

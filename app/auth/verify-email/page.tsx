@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { verifyEmail } from "@/lib/auth/native/service";
+import { t } from "@/lib/i18n/server";
 
 /**
  * /auth/verify-email?token=pbev_...
@@ -14,7 +15,9 @@ export default async function VerifyEmailPage({
   searchParams: { token?: string };
 }) {
   const token = searchParams.token || "";
-  const result = token ? await verifyEmail(token) : { ok: false as const, error: "Missing token." };
+  const result = token
+    ? await verifyEmail(token)
+    : { ok: false as const, errorKey: "public.verify.missingToken" };
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
@@ -23,19 +26,17 @@ export default async function VerifyEmailPage({
           {result.ok ? "✅" : "⚠️"}
         </div>
         <h1 className="text-2xl font-bold text-gray-900">
-          {result.ok ? "Email verified" : "We couldn't verify your email"}
+          {result.ok ? t("public.verify.successTitle") : t("public.verify.failTitle")}
         </h1>
         <p className="text-sm text-gray-600">
-          {result.ok
-            ? "Your account is fully active. You can continue to your dashboard."
-            : result.error}
+          {result.ok ? t("public.verify.successBody") : t(result.errorKey)}
         </p>
         <div className="flex justify-center gap-2 pt-2">
           <Link
             href={result.ok ? "/dashboard" : "/login"}
             className="px-4 py-2 text-sm bg-brand text-white rounded hover:bg-brand-dark"
           >
-            {result.ok ? "Go to dashboard" : "Back to sign in"}
+            {result.ok ? t("public.verify.goToDashboard") : t("public.verify.backToSignIn")}
           </Link>
         </div>
       </div>

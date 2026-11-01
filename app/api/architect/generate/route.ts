@@ -6,6 +6,7 @@ import { generateBrief } from "@/lib/architect/rules";
 import { renderAllFloors } from "@/lib/architect/floor-plan-svg";
 import { generateNarrative } from "@/lib/architect/llm";
 import { generateRender } from "@/lib/architect/render-image";
+import { getLocale } from "@/lib/i18n/server";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { notifyBrokersOfPublicLead } from "@/lib/architect/notify-brokers";
 import { planCaps, PUBLIC_FLOW_CAPABILITIES } from "@/lib/plans";
@@ -181,7 +182,7 @@ export async function POST(req: NextRequest) {
     const billingOrgId = orgId; // null for public_lead — no broker billed
     const [narrativeResult, renderResult] = await Promise.allSettled([
       caps.llmNarrative
-        ? generateNarrative(requirements, brief, billingOrgId)
+        ? generateNarrative(requirements, brief, billingOrgId, getLocale())
         : Promise.resolve({ text: null, cacheHit: false, costMicroUsd: 0 }),
       caps.aiRender
         ? generateRender(requirements, billingOrgId)
@@ -192,6 +193,7 @@ export async function POST(req: NextRequest) {
       narrativeResult.status === "fulfilled" ? narrativeResult.value : { text: null, cacheHit: false, costMicroUsd: 0 };
     const narrative = (narrativeRes as any).text;
     const llmCacheHit = (narrativeRes as any).cacheHit ?? false;
+    if ((narrativeRes as any).fallback) brief.narrativeFallback = true;
 
     const renderOk = renderResult.status === "fulfilled" ? renderResult.value : null;
     const renderCacheHit = renderOk?.cacheHit ?? false;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import { useRouter } from "next/navigation";
 import {
   TkxAlert,
@@ -10,6 +11,7 @@ import {
   TkxCardHeader,
   TkxInput,
 } from "@/components/tkx-dyn";
+import { useT } from "@/lib/i18n/client";
 
 type Counts = {
   users: number;
@@ -28,6 +30,7 @@ export function DangerZone({
   counts: Counts;
 }) {
   const router = useRouter();
+  const t = useT();
   const [confirmSlug, setConfirmSlug] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -35,20 +38,23 @@ export function DangerZone({
 
   const slugMatches = confirmSlug.trim() === orgSlug;
   const canDelete = slugMatches && acknowledged && !submitting;
+  const plural = (n: number) => (n === 1 ? "one" : "other");
+  const [erasesBefore, erasesAfter] = t("account.danger.erases").split("{org}");
+  const [copyBefore, copyAfter] = t("account.danger.copyHint").split("{link}");
 
   async function onDelete() {
     if (!canDelete) return;
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/account/delete", {
+      const res = await csrfFetch("/api/account/delete", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ confirmSlug }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.error || `Deletion failed (HTTP ${res.status})`);
+        setError(j.error || t("account.danger.failedHttp", { status: res.status }));
         setSubmitting(false);
         return;
       }
@@ -57,7 +63,7 @@ export function DangerZone({
       // org are evicted.
       window.location.href = "/signup";
     } catch (e: any) {
-      setError(e?.message || "Network error");
+      setError(e?.message || t("account.danger.networkError"));
       setSubmitting(false);
     }
   }
@@ -65,49 +71,50 @@ export function DangerZone({
   return (
     <TkxCard variant="outlined" padding="lg">
       <TkxCardHeader
-        title="Delete organization and all data"
-        subtitle="Permanently removes your brokerage, every team member's access, and all client/plot/visit/design records."
+        title={t("account.danger.cardTitle")}
+        subtitle={t("account.danger.cardSubtitle")}
       />
       <TkxCardBody>
         <div className="space-y-5">
-          <TkxAlert variant="danger" title="This cannot be undone">
+          <TkxAlert variant="danger" title={t("account.danger.cannotUndo")}>
             <div className="space-y-2 text-sm">
               <p>
-                Deletion erases <strong>{orgName}</strong> and everything attached to it:
+                {erasesBefore}
+                <strong>{orgName}</strong>
+                {erasesAfter}
               </p>
               <ul className="list-disc pl-5 space-y-0.5">
                 <li>
-                  <strong>{counts.users}</strong> user account{counts.users === 1 ? "" : "s"} (you
-                  and every team member)
+                  <strong>{counts.users}</strong> {t(`account.danger.users.${plural(counts.users)}`)}
                 </li>
                 <li>
-                  <strong>{counts.plots}</strong> plot listing{counts.plots === 1 ? "" : "s"}
+                  <strong>{counts.plots}</strong> {t(`account.danger.plots.${plural(counts.plots)}`)}
                 </li>
                 <li>
-                  <strong>{counts.visits}</strong> visit record{counts.visits === 1 ? "" : "s"}
+                  <strong>{counts.visits}</strong> {t(`account.danger.visits.${plural(counts.visits)}`)}
                 </li>
                 <li>
-                  <strong>{counts.designs}</strong> AI-generated design{counts.designs === 1 ? "" : "s"}
+                  <strong>{counts.designs}</strong> {t(`account.danger.designs.${plural(counts.designs)}`)}
                 </li>
-                <li>All messages, notifications, invitations, and analytics history</li>
+                <li>{t("account.danger.rest")}</li>
               </ul>
               <p className="text-xs">
-                If you need a copy of any of this, cancel and run{" "}
+                {copyBefore}
                 <a
                   href="/dashboard/settings/data-export"
                   className="text-brand font-medium underline"
                 >
-                  data export
-                </a>{" "}
-                first.
+                  {t("account.danger.dataExportLink")}
+                </a>
+                {copyAfter}
               </p>
             </div>
           </TkxAlert>
 
           <div>
             <TkxInput
-              label="Type the organization slug to confirm"
-              hint={`Slug: ${orgSlug}`}
+              label={t("account.danger.slugLabel")}
+              hint={t("account.danger.slugHint", { slug: orgSlug })}
               value={confirmSlug}
               onChange={(e) => setConfirmSlug(e.target.value)}
               placeholder={orgSlug}
@@ -116,7 +123,7 @@ export function DangerZone({
               isInvalid={confirmSlug.length > 0 && !slugMatches}
               error={
                 confirmSlug.length > 0 && !slugMatches
-                  ? "Doesn't match the slug shown."
+                  ? t("account.danger.slugMismatch")
                   : undefined
               }
             />
@@ -130,14 +137,11 @@ export function DangerZone({
               onChange={(e) => setAcknowledged(e.target.checked)}
               className="mt-0.5"
             />
-            <span>
-              I understand this is permanent and cannot be reversed by support. I have already
-              exported any data I want to keep.
-            </span>
+            <span>{t("account.danger.acknowledge")}</span>
           </label>
 
           {error && (
-            <TkxAlert variant="danger" title="Deletion failed">
+            <TkxAlert variant="danger" title={t("account.danger.failed")}>
               {error}
             </TkxAlert>
           )}
@@ -150,10 +154,10 @@ export function DangerZone({
               onClick={onDelete}
               disabled={!canDelete}
               isLoading={submitting}
-              loadingText="Deleting…"
+              loadingText={t("account.danger.deleting")}
               aria-describedby={canDelete ? undefined : "danger-zone-requirements"}
             >
-              Delete {orgName} forever
+              {t("account.danger.deleteForever", { name: orgName })}
             </TkxButton>
             {!canDelete && (
               <p
@@ -161,8 +165,8 @@ export function DangerZone({
                 className="text-xs text-gray-500"
               >
                 {!slugMatches
-                  ? "Enter the exact slug above to enable deletion."
-                  : "Tick the acknowledgement to enable deletion."}
+                  ? t("account.danger.enterSlug")
+                  : t("account.danger.tickAck")}
               </p>
             )}
           </div>

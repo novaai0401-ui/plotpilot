@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -34,7 +35,7 @@ function AuthCompleteInner() {
     e.preventDefault();
     setSubmitting(true);
     setErr(null);
-    const res = await fetch("/api/auth/provision", {
+    const res = await csrfFetch("/api/auth/provision", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orgName, name, phone }),

@@ -1,6 +1,8 @@
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { AnalyticsCharts } from "@/components/analytics-charts";
+import { EVENT_LABELS } from "@/lib/audit-log/events";
+import { t } from "@/lib/i18n/server";
 
 export default async function AnalyticsPage() {
   const user = await requireUser(BROKER_ROLES);
@@ -32,22 +34,26 @@ export default async function AnalyticsPage() {
   const invitesAccepted = totals["invitation.accepted"] || 0;
   const conversion = invitesSent ? Math.round((invitesAccepted / invitesSent) * 100) : 0;
 
+  const seriesLabels = Object.fromEntries(
+    Object.entries(EVENT_LABELS).map(([type, event]) => [type, t(event.labelKey)])
+  );
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Analytics (last 30 days)</h1>
+      <h1 className="text-2xl font-bold">{t("account.analytics.title")}</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Kpi label="Invitations sent" value={invitesSent} />
-        <Kpi label="Invitations accepted" value={invitesAccepted} />
-        <Kpi label="Conversion" value={`${conversion}%`} />
-        <Kpi label="Messages sent" value={totals["message.sent"] || 0} />
-        <Kpi label="Visits scheduled" value={totals["visit.scheduled"] || 0} />
-        <Kpi label="Visits completed" value={totals["visit.completed"] || 0} />
-        <Kpi label="Visits cancelled" value={totals["visit.cancelled"] || 0} />
-        <Kpi label="Plots created" value={totals["plot.created"] || 0} />
+        <Kpi label={t("account.analytics.invitesSent")} value={invitesSent} />
+        <Kpi label={t("account.analytics.invitesAccepted")} value={invitesAccepted} />
+        <Kpi label={t("account.analytics.conversion")} value={`${conversion}%`} />
+        <Kpi label={t("account.analytics.messagesSent")} value={totals["message.sent"] || 0} />
+        <Kpi label={t("account.analytics.visitsScheduled")} value={totals["visit.scheduled"] || 0} />
+        <Kpi label={t("account.analytics.visitsCompleted")} value={totals["visit.completed"] || 0} />
+        <Kpi label={t("account.analytics.visitsCancelled")} value={totals["visit.cancelled"] || 0} />
+        <Kpi label={t("account.analytics.plotsCreated")} value={totals["plot.created"] || 0} />
       </div>
 
-      <AnalyticsCharts series={series} />
+      <AnalyticsCharts series={series} seriesLabels={seriesLabels} />
     </div>
   );
 }

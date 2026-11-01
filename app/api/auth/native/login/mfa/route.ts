@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { completeMfaChallenge } from "@/lib/auth/native/service";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { t } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   });
   if (!rl.success) {
     return NextResponse.json(
-      { error: "Too many MFA attempts on this challenge. Sign in again." },
+      { error: t("public.err.tooManyMfa") },
       { status: 429 }
     );
   }
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ error: t(result.errorKey, result.errorVars) }, { status: result.status });
   }
   return NextResponse.json({ ok: true });
 }

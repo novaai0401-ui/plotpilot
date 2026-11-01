@@ -1,7 +1,8 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Sky, Text, Edges } from "@react-three/drei";
+import { OrbitControls, Sky, Html, Edges } from "@react-three/drei";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Architectural 3D viewer.
@@ -178,15 +179,12 @@ function Room3D({
       />
 
       {showLabel && width > 5 && depth > 5 && (
-        <Text
-          position={[cx, height + 0.6, cz]}
-          fontSize={Math.min(1.2, width / 8)}
-          color="#111827"
-          anchorX="center"
-          anchorY="bottom"
-        >
-          {label}
-        </Text>
+        // Html, not drei's Text: its WebGL fonts cannot draw Devanagari.
+        <Html position={[cx, height + 0.6, cz]} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+          <span className="whitespace-nowrap rounded bg-white/85 px-1 text-[11px] font-medium text-gray-900">
+            {label}
+          </span>
+        </Html>
       )}
     </group>
   );
@@ -345,6 +343,7 @@ function computeExteriorEdges(
 }
 
 export function Building3DViewer({ brief }: { brief: Brief }) {
+  const t = useT();
   const [visibleFloors, setVisibleFloors] = useState<Set<number>>(
     () => new Set(brief.floors.map((f) => f.floor))
   );
@@ -379,7 +378,7 @@ export function Building3DViewer({ brief }: { brief: Brief }) {
   return (
     <div className="bg-white border rounded-lg overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 p-3 border-b bg-gray-50 text-sm">
-        <span className="font-medium">Visible floors:</span>
+        <span className="font-medium">{t("design.viewer3d.visibleFloors")}</span>
         {brief.floors.map((f) => (
           <label key={f.floor} className="flex items-center gap-1.5">
             <input
@@ -402,7 +401,7 @@ export function Building3DViewer({ brief }: { brief: Brief }) {
               checked={showLabels}
               onChange={(e) => setShowLabels(e.target.checked)}
             />
-            Labels
+            {t("design.viewer3d.labels")}
           </label>
           <label className="flex items-center gap-1.5">
             <input
@@ -410,11 +409,11 @@ export function Building3DViewer({ brief }: { brief: Brief }) {
               checked={showRoof}
               onChange={(e) => setShowRoof(e.target.checked)}
             />
-            Roof
+            {t("design.viewer3d.roof")}
           </label>
         </span>
         <span className="ml-auto text-xs text-gray-500">
-          Drag to rotate · scroll to zoom · right-click drag to pan
+          {t("design.viewer3d.help")}
         </span>
       </div>
       <div style={{ width: "100%", height: 520 }}>

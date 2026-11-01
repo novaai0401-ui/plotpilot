@@ -5,6 +5,8 @@ import { planCaps } from "@/lib/plans";
 import { ManageSubscription } from "@/components/billing/manage-subscription";
 import { UsageTable, type UsageRow } from "@/components/usage/usage-table";
 import { UsagePageShell } from "@/components/usage/usage-page-shell";
+import { formatDate } from "@/lib/i18n/format";
+import { getLocale, t } from "@/lib/i18n/server";
 
 export default async function UsagePage() {
   const user = await requireUser(BROKER_ROLES);
@@ -34,33 +36,33 @@ export default async function UsagePage() {
   const rows: UsageRow[] = [
     {
       kind: "llm_tokens",
-      label: "AI narrative",
+      label: t("account.usage.row.llm"),
       units: units.llm_tokens,
-      unitLabel: "tokens",
+      unitLabel: t("account.usage.unit.tokens"),
       cents: spendCents.llm_tokens,
       projectedCents: spendCents.llm_tokens * projectionMultiplier,
     },
     {
       kind: "render_request",
-      label: "AI render image",
+      label: t("account.usage.row.render"),
       units: units.render_request,
-      unitLabel: "renders",
+      unitLabel: t("account.usage.unit.renders"),
       cents: spendCents.render_request,
       projectedCents: spendCents.render_request * projectionMultiplier,
     },
     {
       kind: "whatsapp_message",
-      label: "WhatsApp Business",
+      label: t("account.usage.row.whatsapp"),
       units: units.whatsapp_message,
-      unitLabel: "messages",
+      unitLabel: t("account.usage.unit.messages"),
       cents: spendCents.whatsapp_message,
       projectedCents: spendCents.whatsapp_message * projectionMultiplier,
     },
     {
       kind: "email_send",
-      label: "Email",
+      label: t("common.email"),
       units: units.email_send,
-      unitLabel: "emails",
+      unitLabel: t("account.usage.unit.emails"),
       cents: spendCents.email_send,
       projectedCents: spendCents.email_send * projectionMultiplier,
     },
@@ -68,11 +70,11 @@ export default async function UsagePage() {
 
   return (
     <UsagePageShell
-      planLabel={caps.label}
+      planLabel={t(`account.plan.${org.plan}`)}
       priceInr={caps.priceInr}
       renewsOn={
         org.subscriptionEndsAt && org.subscriptionStatus === "active"
-          ? new Date(org.subscriptionEndsAt).toLocaleDateString()
+          ? formatDate(org.subscriptionEndsAt, getLocale())
           : null
       }
       headlineKpis={{

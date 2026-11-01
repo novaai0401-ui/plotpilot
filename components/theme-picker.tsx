@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import { useRouter } from "next/navigation";
 import type { ThemeMode } from "@/lib/theme";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Three-state theme picker — Light / Dark / Auto.
@@ -17,13 +19,14 @@ import type { ThemeMode } from "@/lib/theme";
  */
 export function ThemePicker({ current }: { current: ThemeMode }) {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = useState<ThemeMode | null>(null);
 
   async function setMode(mode: ThemeMode) {
     if (busy || mode === current) return;
     setBusy(mode);
     try {
-      await fetch("/api/theme", {
+      await csrfFetch("/api/theme", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ mode }),
@@ -38,15 +41,15 @@ export function ThemePicker({ current }: { current: ThemeMode }) {
   }
 
   const options: Array<{ value: ThemeMode; label: string; icon: string }> = [
-    { value: "light", label: "Light", icon: "☀" },
-    { value: "dark", label: "Dark", icon: "☾" },
-    { value: "auto", label: "Auto", icon: "⌬" },
+    { value: "light", label: t("account.theme.light"), icon: "☀" },
+    { value: "dark", label: t("account.theme.dark"), icon: "☾" },
+    { value: "auto", label: t("account.theme.auto"), icon: "⌬" },
   ];
 
   return (
     <div
       role="radiogroup"
-      aria-label="Theme"
+      aria-label={t("account.theme.label")}
       aria-busy={busy !== null}
       className="inline-flex border rounded overflow-hidden text-xs"
     >

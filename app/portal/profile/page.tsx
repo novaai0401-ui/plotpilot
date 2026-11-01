@@ -8,6 +8,7 @@ import {
   TkxCardHeader,
   TkxInput,
 } from "@/components/tkx-dyn";
+import { t } from "@/lib/i18n/server";
 
 async function saveProfile(formData: FormData) {
   "use server";
@@ -34,32 +35,32 @@ export default async function ClientProfilePage() {
 
   return (
     <div className="max-w-md space-y-4">
-      <h1 className="text-2xl font-bold">Profile</h1>
+      <h1 className="text-2xl font-bold">{t("public.portal.nav.profile")}</h1>
       <TkxCard variant="elevated" padding="lg">
         <TkxCardHeader
-          title="Your details"
-          subtitle="Your broker uses these to reach you about visits and listings."
+          title={t("public.portal.profile.detailsTitle")}
+          subtitle={t("public.portal.profile.detailsSubtitle")}
         />
         <TkxCardBody>
           <form action={saveProfile} className="space-y-4">
             <TkxInput
-              label="Name"
+              label={t("common.name")}
               name="name"
               defaultValue={me?.name}
               autoComplete="name"
               isRequired
             />
             <TkxInput
-              label="Phone"
+              label={t("common.phone")}
               name="phone"
               type="tel"
               defaultValue={me?.phone}
               autoComplete="tel"
               isRequired
-              hint="Include country code (e.g. +91…) for WhatsApp deep-links."
+              hint={t("public.portal.profile.phoneHint")}
             />
             <TkxInput
-              label="Email"
+              label={t("common.email")}
               name="email"
               type="email"
               defaultValue={me?.email || ""}
@@ -71,7 +72,7 @@ export default async function ClientProfilePage() {
               colorScheme="primary"
               isFullWidth
             >
-              Save
+              {t("common.save")}
             </TkxButton>
           </form>
         </TkxCardBody>

@@ -1,6 +1,8 @@
 "use client";
 import { ReactNode } from "react";
 import { TkxCard, TkxCardHeader, TkxCardBody, TkxStatistic, TkxAlert, TkxBadge } from "@/components/tkx-dyn";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatInr, formatNumber } from "@/lib/i18n/format";
 
 type Kpis = {
   spendCents: number;
@@ -28,18 +30,21 @@ export function UsagePageShell({
   manageSubscription: ReactNode;
   table: ReactNode;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const overCap = headlineKpis.designsUsed >= headlineKpis.designsCap;
+  const [deeplinkBefore, deeplinkAfter] = t("account.usage.autoWhatsappBody").split("{deeplink}");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080 }}>
       <TkxCard variant="elevated" padding="lg">
         <TkxCardHeader
-          title={<span style={{ fontSize: 22, fontWeight: 700 }}>Usage &amp; billing</span>}
+          title={<span style={{ fontSize: 22, fontWeight: 700 }}>{t("account.usage.title")}</span>}
           subtitle={
             <span style={{ fontSize: 13, color: "#6b7280" }}>
-              Plan: <TkxBadge variant={priceInr === 0 ? "default" : "primary"} size="sm" outlined>{planLabel}</TkxBadge>{" "}
-              · {priceInr === 0 ? "Free" : `₹${priceInr.toLocaleString("en-IN")}/month`}
-              {renewsOn && <> · renews {renewsOn}</>}
+              {t("account.usage.plan")} <TkxBadge variant={priceInr === 0 ? "default" : "primary"} size="sm" outlined>{planLabel}</TkxBadge>{" "}
+              · {priceInr === 0 ? t("common.free") : t("account.billing.perMonth", { price: formatInr(priceInr, locale) })}
+              {renewsOn && <> · {t("account.usage.renews", { date: renewsOn })}</>}
             </span>
           }
           action={manageSubscription}
@@ -48,61 +53,57 @@ export function UsagePageShell({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <KpiCard
-          title="Spend MTD"
+          title={t("account.usage.spendMtd")}
           value={`$${(headlineKpis.spendCents / 100).toFixed(2)}`}
-          suffix={<span style={{ fontSize: 11, color: "#6b7280" }}>proj ${(headlineKpis.projectedSpendCents / 100).toFixed(2)}</span>}
+          suffix={<span style={{ fontSize: 11, color: "#6b7280" }}>{t("account.usage.projected", { amount: `$${(headlineKpis.projectedSpendCents / 100).toFixed(2)}` })}</span>}
         />
         <KpiCard
-          title="Cache savings MTD"
-          value={`~$${headlineKpis.savedCents.toFixed(2)}`}
+          title={t("account.usage.savingsMtd")}
+          value={`~$${(headlineKpis.savedCents / 100).toFixed(2)}`}
           trend="up"
-          trendValue={`${headlineKpis.cacheHitCount} hits`}
+          trendValue={t("account.usage.hits", { count: headlineKpis.cacheHitCount })}
         />
         <KpiCard
-          title="Designs used"
-          value={`${headlineKpis.designsUsed} / ${headlineKpis.designsCap.toLocaleString()}`}
+          title={t("account.usage.designsUsed")}
+          value={`${headlineKpis.designsUsed} / ${formatNumber(headlineKpis.designsCap, locale)}`}
           trend={overCap ? "down" : undefined}
-          trendValue={overCap ? "cap reached" : undefined}
+          trendValue={overCap ? t("account.usage.capReached") : undefined}
         />
         <KpiCard
-          title="Lead alerts"
-          value={`${headlineKpis.leadAlerts} / ${headlineKpis.leadAlertsCap.toLocaleString()}`}
+          title={t("account.usage.leadAlerts")}
+          value={`${headlineKpis.leadAlerts} / ${formatNumber(headlineKpis.leadAlertsCap, locale)}`}
         />
       </div>
 
       <TkxCard variant="outlined" padding="none">
-        <TkxCardHeader title="Per-service breakdown (this month)" />
+        <TkxCardHeader title={t("account.usage.breakdown")} />
         <TkxCardBody>{table}</TkxCardBody>
       </TkxCard>
 
-      <TkxAlert variant="info" title="How we keep your bill low">
+      <TkxAlert variant="info" title={t("account.usage.lowBillTitle")}>
         <ul style={{ marginTop: 8, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4 }}>
-          <li><strong>Cache</strong> — identical design requirements within 30 days reuse the previous AI output (zero cost on cache hit).</li>
-          <li><strong>Plan gating</strong> — free plan uses our deterministic rules engine only; AI features unlock on Pro+.</li>
-          <li><strong>Channel opt-ins</strong> — WhatsApp Business API sends are off by default. In-app + email are free at your volume.</li>
-          <li><strong>Geo routing</strong> — public-lead alerts only fire for orgs in the lead's service area.</li>
+          <li><strong>{t("account.usage.cacheTerm")}</strong> — {t("account.usage.cacheBody")}</li>
+          <li><strong>{t("account.usage.gatingTerm")}</strong> — {t("account.usage.gatingBody")}</li>
+          <li><strong>{t("account.usage.optInTerm")}</strong> — {t("account.usage.optInBody")}</li>
+          <li><strong>{t("account.usage.geoTerm")}</strong> — {t("account.usage.geoBody")}</li>
         </ul>
       </TkxAlert>
 
-      <TkxAlert variant="info" title="What happens if I downgrade?">
+      <TkxAlert variant="info" title={t("account.usage.downgradeTitle")}>
         <ul style={{ marginTop: 8, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4 }}>
           <li>
-            <strong>Past designs are yours forever.</strong> Anything you've already generated stays
-            viewable and downloadable (PDF, DXF) regardless of plan changes.
+            <strong>{t("account.usage.pastTerm")}</strong> {t("account.usage.pastBody")}
           </li>
           <li>
-            <strong>New design generation</strong> follows the new plan's cap and feature set
-            starting from the moment of downgrade.
+            <strong>{t("account.usage.newTerm")}</strong> {t("account.usage.newBody")}
           </li>
           <li>
-            <strong>WhatsApp Business API sends</strong> automatically pause if your new plan
-            doesn't include them. We fall back to <em>wa.me</em> deeplinks so you can still message
-            clients manually. Your stored credentials remain encrypted on file — re-upgrade and
-            they're live again instantly.
+            <strong>{t("account.usage.autoWhatsappTerm")}</strong> {deeplinkBefore}
+            <em>wa.me</em>
+            {deeplinkAfter}
           </li>
           <li>
-            <strong>Lead alerts</strong> respect the new monthly cap. In-app + email continue;
-            WhatsApp alerts pause if downgraded out of the Enterprise tier.
+            <strong>{t("account.usage.alertsTerm")}</strong> {t("account.usage.alertsBody")}
           </li>
         </ul>
       </TkxAlert>

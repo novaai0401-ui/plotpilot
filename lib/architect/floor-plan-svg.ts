@@ -1,3 +1,4 @@
+import { format, translate, type Locale } from "@/lib/i18n/dict";
 import type { FloorPlan, RoomSpec } from "./rules";
 import type { Requirements } from "./requirements";
 
@@ -15,9 +16,22 @@ export type FloorPlanSvg = {
   svg: string;
 };
 
-const SCALE = 4; // pixels per foot
+/** Optional replacement for <text>, used by the PDF because resvg garbles Devanagari. */
+export type SvgTextDrawer = (
+  text: string,
+  x: number,
+  y: number,
+  style: { size: number; bold?: boolean; fill: string; anchor?: "start" | "middle" | "end" }
+) => string;
+
+const svgText: SvgTextDrawer = (text, x, y, { size, bold, fill, anchor = "start" }) =>
+  `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" font-family="sans-serif" fill="${fill}"${
+    bold ? ' font-weight="600"' : ""
+  }>${escapeXml(text)}</text>`;
+
+const SCALE = 12; // pixels per foot
 const PADDING = 24;
-const LABEL_H = 28;
+const LABEL_H = 44;
 
 function placeRooms(rooms: RoomSpec[], maxWidthFt: number): { x: number; y: number; r: RoomSpec }[] {
   // Sort large rooms first so big anchors go in first.
@@ -78,7 +92,7 @@ function colorFor(type: RoomSpec["type"]): string {
   }
 }
 
-function escapeXml(s: string): string {
+export function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[c]!)
   );
@@ -87,7 +101,9 @@ function escapeXml(s: string): string {
 export function renderFloorPlanSvg(
   floor: FloorPlan,
   req: Requirements,
-  footprint: { widthFt: number; depthFt: number }
+  footprint: { widthFt: number; depthFt: number },
+  locale: Locale = "en",
+  drawText: SvgTextDrawer = svgText
 ): FloorPlanSvg {
   const placed = placeRooms(floor.rooms, footprint.widthFt);
   // Compute actual bounding box from placements
@@ -108,14 +124,19 @@ export function renderFloorPlanSvg(
       <g>
         <rect x="${x}" y="${y}" width="${w}" height="${h}"
               fill="${fill}" stroke="#374151" stroke-width="1.5" rx="2"/>
-        <text x="${x + w / 2}" y="${y + h / 2 - 4}" text-anchor="middle"
-              font-size="${Math.max(8, Math.min(13, w / 8))}" font-family="sans-serif" fill="#111827" font-weight="600">
-          ${escapeXml(p.r.name)}
-        </text>
-        <text x="${x + w / 2}" y="${y + h / 2 + 11}" text-anchor="middle"
-              font-size="${Math.max(7, Math.min(11, w / 10))}" font-family="sans-serif" fill="#374151">
-          ${dims} (${p.r.areaSqft} sqft)
-        </text>
+        ${drawText(p.r.name, x + w / 2, y + h / 2 - 4, {
+          size: Math.max(9, Math.min(14, w / 7)),
+          bold: true,
+          fill: "#111827",
+          anchor: "middle",
+        })}
+        ${drawText(
+          // Narrow rooms only have space for the dimensions.
+          w < 100 ? dims : `${dims} (${format("design.plan.areaShort", locale, { value: p.r.areaSqft })})`,
+          x + w / 2,
+          y + h / 2 + 12,
+          { size: Math.max(8, Math.min(11, w / 10)), fill: "#374151", anchor: "middle" }
+        )}
       </g>`;
   });
 
@@ -130,13 +151,17 @@ export function renderFloorPlanSvg(
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}">
     <rect width="100%" height="100%" fill="#ffffff"/>
-    <text x="${PADDING}" y="${PADDING + 18}" font-family="sans-serif" font-size="16" font-weight="700" fill="#111827">
-      ${escapeXml(floor.label)} — ${floor.netSqft} sqft net
-    </text>
-    <text x="${svgW - PADDING}" y="${PADDING + 18}" text-anchor="end"
-          font-family="sans-serif" font-size="12" fill="#6b7280">
-      facing ${escapeXml(facing)} · scale 1ft = ${SCALE}px
-    </text>
+    ${drawText(format("design.plan.heading", locale, { label: floor.label, net: floor.netSqft }), PADDING, PADDING + 18, {
+      size: 16,
+      bold: true,
+      fill: "#111827",
+    })}
+    ${drawText(
+      format("design.plan.facing", locale, { facing: translate(`design.facing.${facing}`, locale), scale: SCALE }),
+      PADDING,
+      PADDING + 36,
+      { size: 12, fill: "#6b7280" }
+    )}
     ${plotRect}
     ${rects.join("\n")}
   </svg>`;
@@ -147,7 +172,9 @@ export function renderFloorPlanSvg(
 export function renderAllFloors(
   floors: FloorPlan[],
   req: Requirements,
-  footprint: { widthFt: number; depthFt: number }
+  footprint: { widthFt: number; depthFt: number },
+  locale: Locale = "en",
+  drawText?: SvgTextDrawer
 ): FloorPlanSvg[] {
-  return floors.map((f) => renderFloorPlanSvg(f, req, footprint));
+  return floors.map((f) => renderFloorPlanSvg(f, req, footprint, locale, drawText));
 }

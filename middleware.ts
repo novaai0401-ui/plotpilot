@@ -69,7 +69,7 @@ export function middleware(request: NextRequest) {
     u.searchParams.set("from", pathname);
     return NextResponse.redirect(u);
   }
-  if (isAuthPage && hasSession) {
+  if (isAuthPage && hasSession && !request.nextUrl.searchParams.has("expired")) {
     const u = request.nextUrl.clone();
     u.pathname = "/dashboard";
     return NextResponse.redirect(u);

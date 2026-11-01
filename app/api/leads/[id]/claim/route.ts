@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { appUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db/prisma";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { resolveWhatsAppProvider, renderTemplate } from "@/lib/whatsapp";
@@ -79,9 +80,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Optional immediate WhatsApp invite to the lead
   let inviteSend: any = null;
   if (sendInvite) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const inviteUrl = `${appUrl}/signup?invite=${token}`;
-    const designUrl = `${appUrl}/designs/${design.id}`;
+    const baseUrl = appUrl();
+    const inviteUrl = `${baseUrl}/signup?invite=${token}`;
+    const designUrl = `${baseUrl}/designs/${design.id}`;
 
     const org = await prisma.organization.findUnique({
       where: { id: user.orgId },

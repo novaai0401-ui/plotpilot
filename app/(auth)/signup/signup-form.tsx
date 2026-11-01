@@ -15,6 +15,8 @@ import {
   TkxCardHeader,
   TkxInput,
 } from "@/components/tkx-dyn";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatDate } from "@/lib/i18n/format";
 
 type TeamPreview =
   | {
@@ -36,14 +38,19 @@ type ClientPreview =
 type InvitePreview = TeamPreview | ClientPreview | null;
 
 export function SignupForm({ preview }: { preview: InvitePreview }) {
-  const router = useRouter();
-  const params = useSearchParams();
-  const inviteToken = params.get("invite");
-  const teamToken = params.get("team");
-
   if (preview && preview.status !== "valid") {
     return <InviteErrorScreen preview={preview} />;
   }
+  return <ValidSignupForm preview={preview} />;
+}
+
+function ValidSignupForm({ preview }: { preview: InvitePreview }) {
+  const router = useRouter();
+  const params = useSearchParams();
+  const t = useT();
+  const locale = useLocale();
+  const inviteToken = params.get("invite");
+  const teamToken = params.get("team");
 
   const verifiedTeam = preview?.kind === "team" && preview.status === "valid" ? preview : null;
   const verifiedClient = preview?.kind === "client" && preview.status === "valid" ? preview : null;
@@ -87,7 +94,10 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      if (!res.ok) {
+        setError(json.error || t("common.somethingWrong"));
+        return;
+      }
 
       // Session cookie is already set. Show "check your inbox" briefly so
       // the user knows the verification email is coming, then forward.
@@ -96,33 +106,34 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
         router.push(nextPath);
         router.refresh();
       }, 1500);
-    } catch (e: any) {
-      setError(e.message);
+    } catch {
+      setError(t("common.somethingWrong"));
     } finally {
       setLoading(false);
     }
   }
 
   if (pendingEmail) {
+    const [sentBefore, sentAfter] = t(
+      inviteToken ? "public.signup.confirmationBody.portal" : "public.signup.confirmationBody.dashboard"
+    ).split("{email}");
     return (
       <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
         <div className="w-full max-w-md">
           <TkxCard variant="elevated" padding="lg">
             <TkxCardHeader
-              title="📬 Check your inbox"
-              subtitle="One last step to activate your account."
+              title={`📬 ${t("public.signup.checkInbox")}`}
+              subtitle={t("public.signup.oneLastStep")}
             />
             <TkxCardBody>
               <div className="space-y-4">
-                <TkxAlert variant="info" title="Confirmation email sent">
-                  We sent a confirmation link to <strong>{pendingEmail}</strong>. Click it to
-                  activate your account — you&apos;ll be signed in and dropped straight into{" "}
-                  {inviteToken ? "your client portal" : "your dashboard"}.
+                <TkxAlert variant="info" title={t("public.signup.confirmationSent")}>
+                  {sentBefore}
+                  <strong>{pendingEmail}</strong>
+                  {sentAfter}
                 </TkxAlert>
                 <p className="text-xs text-gray-500">
-                  <strong>Didn&apos;t get it?</strong> Check spam, or have your Supabase admin
-                  disable email confirmation in <em>Authentication → Sign In / Providers → Email</em>{" "}
-                  for faster dev iteration.
+                  <strong>{t("public.signup.notReceived")}</strong> {t("public.signup.notReceivedHelp")}
                 </p>
                 <div className="flex justify-between text-xs">
                   <button
@@ -130,10 +141,10 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
                     onClick={() => setPendingEmail(null)}
                     className="text-gray-500 hover:underline"
                   >
-                    ← Use a different email
+                    ← {t("public.signup.differentEmail")}
                   </button>
                   <Link href="/login" className="text-brand font-medium hover:underline">
-                    I already confirmed — sign in
+                    {t("public.signup.alreadyConfirmed")}
                   </Link>
                 </div>
               </div>
@@ -145,15 +156,17 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
   }
 
   const title = verifiedTeam
-    ? `Join the ${verifiedTeam.role === "broker_admin" ? "admin" : "agent"} team`
+    ? t(verifiedTeam.role === "broker_admin" ? "public.signup.titleTeamAdmin" : "public.signup.titleTeamAgent")
     : verifiedClient
-    ? "Join as client"
-    : "Start your brokerage";
+    ? t("public.signup.titleClient")
+    : t("public.signup.titleOrg");
   const subtitle = verifiedTeam
-    ? "Your colleague invited you. Set a password to activate your account."
+    ? t("public.signup.subtitleTeam")
     : verifiedClient
-    ? "Your broker invited you. Create an account to see plots and visits."
-    : "Create your organization in under a minute.";
+    ? t("public.signup.subtitleClient")
+    : t("public.signup.subtitleOrg");
+  const [issuedBefore, issuedAfter] = t("public.signup.inviteIssuedTo").split("{email}");
+  const [validBefore, validAfter] = t("public.signup.inviteValidUntil").split("{date}");
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
@@ -168,28 +181,31 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
               aria-label={title}
             >
               {verifiedTeam && (
-                <TkxAlert variant="success" title={`Joining ${verifiedTeam.orgName}`}>
-                  Role:{" "}
-                  <strong>
-                    {verifiedTeam.role === "broker_admin" ? "Admin" : "Agent"}
-                  </strong>{" "}
-                  · Invite issued to <code>{verifiedTeam.email}</code>
+                <TkxAlert
+                  variant="success"
+                  title={t("public.signup.joiningOrg", { org: verifiedTeam.orgName })}
+                >
+                  {t("public.signup.role")} <strong>{t(`role.${verifiedTeam.role}`)}</strong> ·{" "}
+                  {issuedBefore}
+                  <code>{verifiedTeam.email}</code>
+                  {issuedAfter}
                 </TkxAlert>
               )}
               {verifiedClient && (
                 <TkxAlert
                   variant="success"
-                  title={`Joining ${verifiedClient.orgName} as a client`}
+                  title={t("public.signup.joiningAsClient", { org: verifiedClient.orgName })}
                 >
-                  Invite valid until{" "}
-                  <strong>{verifiedClient.expiresAt.toLocaleDateString()}</strong>
+                  {validBefore}
+                  <strong>{formatDate(verifiedClient.expiresAt, locale)}</strong>
+                  {validAfter}
                 </TkxAlert>
               )}
 
               {/* aria-live wrapper for sign-up errors — see login-inner.tsx for rationale. */}
               <div aria-live="polite" aria-atomic="true">
                 {error && (
-                  <TkxAlert variant="danger" title="Sign-up failed">
+                  <TkxAlert variant="danger" title={t("public.signup.failed")}>
                     {error}
                   </TkxAlert>
                 )}
@@ -197,16 +213,16 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
 
               {!inviteToken && !teamToken && (
                 <TkxInput
-                  label="Brokerage name"
+                  label={t("public.signup.brokerageName")}
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
-                  placeholder="e.g. ABC Plots & Estates"
+                  placeholder={t("public.signup.brokeragePlaceholder")}
                   isRequired
                 />
               )}
 
               <TkxInput
-                label="Your name"
+                label={t("public.signup.yourName")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 isRequired
@@ -214,7 +230,7 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
               />
 
               <TkxInput
-                label="Phone (with country code)"
+                label={t("public.signup.phoneLabel")}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+919876543210"
@@ -223,7 +239,7 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
               />
 
               <TkxInput
-                label="Email"
+                label={t("common.email")}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -231,14 +247,14 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
                 readOnly={Boolean(verifiedTeam)}
                 hint={
                   verifiedTeam
-                    ? "Locked to the invited email — needed for the signed token to validate."
+                    ? t("public.signup.emailLockedHint")
                     : undefined
                 }
                 autoComplete="email"
               />
 
               <TkxInput
-                label="Password"
+                label={t("login.password")}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -253,16 +269,16 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
                 colorScheme="primary"
                 isFullWidth
                 isLoading={loading}
-                loadingText="Creating account…"
+                loadingText={t("public.signup.creatingAccount")}
                 disabled={loading}
               >
-                Create account
+                {t("public.signup.createAccount")}
               </TkxButton>
 
               <div className="text-xs text-gray-500 text-center">
-                Already have an account?{" "}
+                {t("public.signup.haveAccount")}{" "}
                 <Link href="/login" className="text-brand font-medium">
-                  Sign in
+                  {t("login.signIn")}
                 </Link>
               </div>
             </form>
@@ -274,14 +290,15 @@ export function SignupForm({ preview }: { preview: InvitePreview }) {
 }
 
 function InviteErrorScreen({ preview }: { preview: TeamPreview | ClientPreview }) {
+  const t = useT();
   const isTeam = preview.kind === "team";
   const expired = preview.status === "expired";
   const reason = preview.status === "invalid" ? preview.reason : null;
   const title = expired
-    ? "This invite has expired"
+    ? t("public.invite.expiredTitle")
     : isTeam
-    ? "We couldn't verify this team invite"
-    : "We couldn't verify this client invite";
+    ? t("public.invite.unverifiedTeamTitle")
+    : t("public.invite.unverifiedClientTitle");
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
@@ -292,18 +309,18 @@ function InviteErrorScreen({ preview }: { preview: TeamPreview | ClientPreview }
             <div className="space-y-4">
               <TkxAlert
                 variant="danger"
-                title={expired ? "Link no longer valid" : "Verification failed"}
+                title={expired ? t("public.invite.linkInvalid") : t("public.invite.verificationFailed")}
               >
                 {expired
-                  ? `Ask your ${isTeam ? "colleague" : "broker"} to send a fresh invite link — they're valid for 14 days.`
-                  : reason || "The link may be malformed or have been tampered with."}
+                  ? t(isTeam ? "public.invite.askColleague" : "public.invite.askBroker")
+                  : reason || t("public.invite.malformed")}
               </TkxAlert>
               <div className="flex justify-between text-xs">
                 <Link href="/signup" className="text-gray-500 hover:underline">
-                  ← Start a new brokerage instead
+                  ← {t("public.invite.startNew")}
                 </Link>
                 <Link href="/login" className="text-brand font-medium hover:underline">
-                  I already have an account
+                  {t("public.invite.haveAccount")}
                 </Link>
               </div>
             </div>

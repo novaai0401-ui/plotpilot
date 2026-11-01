@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { t } from "@/lib/i18n/server";
 
 async function createPlot(formData: FormData) {
   "use server";
@@ -31,35 +32,35 @@ export default async function NewPlotPage() {
   await requireUser(BROKER_ROLES);
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="text-2xl font-bold">Add a new plot</h1>
+      <h1 className="text-2xl font-bold">{t("broker.plots.new.title")}</h1>
       <form action={createPlot} className="space-y-3 bg-white border rounded-lg p-6">
         <div>
-          <label className="block text-sm font-medium mb-1">Title *</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.plots.new.fieldTitle")} *</label>
           <input name="title" required className="w-full border rounded px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Location *</label>
+          <label className="block text-sm font-medium mb-1">{t("common.location")} *</label>
           <input name="location" required className="w-full border rounded px-3 py-2 text-sm" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1">City</label>
+            <label className="block text-sm font-medium mb-1">{t("common.city")}</label>
             <input name="city" className="w-full border rounded px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Size (sqft)</label>
+            <label className="block text-sm font-medium mb-1">{t("broker.plots.new.sizeSqft")}</label>
             <input name="sizeSqft" type="number" className="w-full border rounded px-3 py-2 text-sm" />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Price (INR)</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.plots.new.priceInr")}</label>
           <input name="priceInr" type="number" className="w-full border rounded px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Description</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.plots.new.description")}</label>
           <textarea name="description" rows={3} className="w-full border rounded px-3 py-2 text-sm" />
         </div>
-        <button className="bg-brand text-white px-4 py-2 rounded text-sm">Create plot</button>
+        <button className="bg-brand text-white px-4 py-2 rounded text-sm">{t("broker.plots.new.submit")}</button>
       </form>
     </div>
   );

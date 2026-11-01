@@ -62,7 +62,7 @@ export default function HomePage() {
       </section>
 
       <footer className="text-center text-xs text-gray-500 py-10">
-        &copy; {new Date().getFullYear()} PlotBroker. All rights reserved.
+        {t("public.landing.footer", { year: new Date().getFullYear() })}
       </footer>
     </main>
   );

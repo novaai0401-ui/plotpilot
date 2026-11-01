@@ -14,6 +14,20 @@ describe("i18n dictionary", () => {
     }
   });
 
+  it("every entry has a Marathi translation", () => {
+    for (const [key, entry] of Object.entries(dict)) {
+      expect(entry.mr, `key "${key}" missing Marathi translation`).toBeTruthy();
+    }
+  });
+
+  it("translations keep every {placeholder} from the English", () => {
+    const placeholders = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+    for (const [key, entry] of Object.entries(dict)) {
+      expect(placeholders(entry.hi!), `Hindi "${key}"`).toEqual(placeholders(entry.en!));
+      expect(placeholders(entry.mr!), `Marathi "${key}"`).toEqual(placeholders(entry.en!));
+    }
+  });
+
   it("default locale is one of the supported locales", () => {
     expect((LOCALES as readonly string[]).includes(DEFAULT_LOCALE)).toBe(true);
   });

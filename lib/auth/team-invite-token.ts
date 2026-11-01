@@ -284,7 +284,14 @@ async function verifyMlDsaToken(token: string, keys: SigvaultKeys): Promise<Team
       encryptKey: keys.encryptKey,
       chain,
     });
-    const payload = result.claims as unknown as TeamInviteTokenPayload;
+    // sigvault returns every claim as a string, so restore the numeric ones.
+    const claims = result.claims as unknown as TeamInviteTokenPayload;
+    const payload: TeamInviteTokenPayload = {
+      ...claims,
+      v: Number(claims.v) as TeamInviteTokenPayload["v"],
+      iat: Number(claims.iat),
+      exp: Number(claims.exp),
+    };
     const e = validatePayload(payload, 2);
     if (e) return { ok: false, error: e };
     return { ok: true, payload, backend: "ml-dsa" };

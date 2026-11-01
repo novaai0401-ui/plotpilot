@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { formatInr } from "@/lib/i18n/format";
+import { t, getLocale } from "@/lib/i18n/server";
 
 export default async function PlotsPage() {
   const user = await requireUser(BROKER_ROLES);
+  const locale = getLocale();
   const plots = await prisma.plot.findMany({
     where: { orgId: user.orgId },
     orderBy: { createdAt: "desc" },
@@ -12,19 +15,19 @@ export default async function PlotsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Plots</h1>
+        <h1 className="text-2xl font-bold">{t("nav.plots")}</h1>
         <Link
           href="/dashboard/plots/new"
           className="bg-brand text-white px-4 py-2 rounded text-sm hover:bg-brand-dark"
         >
-          + Add plot
+          {t("broker.plots.add")}
         </Link>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {plots.length === 0 && (
           <div className="col-span-full p-8 text-center text-gray-500 bg-white border rounded">
-            No plots listed yet.
+            {t("broker.plots.empty")}
           </div>
         )}
         {plots.map((p) => (
@@ -41,18 +44,18 @@ export default async function PlotsPage() {
                     : "bg-gray-200 text-gray-700"
                 }`}
               >
-                {p.status}
+                {t(`status.plot.${p.status}`)}
               </span>
             </div>
             <div className="mt-3 text-sm text-gray-600">
-              {p.sizeSqft ? `${p.sizeSqft} sqft` : ""}
-              {p.priceInr ? ` · ₹${p.priceInr.toLocaleString("en-IN")}` : ""}
+              {p.sizeSqft ? t("broker.sqft", { size: p.sizeSqft }) : ""}
+              {p.priceInr ? ` · ${formatInr(p.priceInr, locale)}` : ""}
             </div>
             <Link
               href={`/dashboard/plots/${p.id}`}
               className="mt-3 inline-block text-xs text-brand hover:underline"
             >
-              View / edit
+              {t("broker.plots.viewEdit")}
             </Link>
           </div>
         ))}

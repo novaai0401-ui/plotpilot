@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/lib/i18n/client";
+
 /**
  * Fallback shown by the next-pwa service worker when navigation fetches fail.
  *
@@ -19,36 +21,32 @@
  *      OS app drawer; confirm cold-start renders /dashboard without network.
  */
 export default function OfflinePage() {
+  const t = useT();
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="max-w-md w-full bg-white border rounded-lg p-8 text-center space-y-4">
         <div className="text-5xl" aria-hidden>
           ⚡
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">You&apos;re offline</h1>
-        <p className="text-sm text-gray-600">
-          We&apos;ll automatically reconnect when your network is back. Pages you&apos;ve
-          already visited should still work — try going back instead of reloading.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">{t("public.offline.title")}</h1>
+        <p className="text-sm text-gray-600">{t("public.offline.body")}</p>
         <div className="pt-2 flex justify-center gap-2">
           <button
             type="button"
             onClick={() => history.back()}
             className="px-4 py-2 text-sm border rounded hover:bg-gray-50"
           >
-            ← Go back
+            ← {t("public.offline.goBack")}
           </button>
           <button
             type="button"
             onClick={() => location.reload()}
             className="px-4 py-2 text-sm bg-brand text-white rounded hover:bg-brand-dark"
           >
-            Retry now
+            {t("public.offline.retry")}
           </button>
         </div>
-        <p className="text-xs text-gray-400 pt-3 border-t">
-          PlotBroker · works offline for pages you&apos;ve already opened.
-        </p>
+        <p className="text-xs text-gray-400 pt-3 border-t">{t("public.offline.footer")}</p>
       </div>
     </main>
   );

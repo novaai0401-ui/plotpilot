@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { t } from "@/lib/i18n/server";
 import { formatPhone } from "@/lib/utils";
 
 async function createInvitation(formData: FormData) {
@@ -47,18 +48,17 @@ export default async function NewInvitationPage() {
 
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="text-2xl font-bold">Invite a new client</h1>
+      <h1 className="text-2xl font-bold">{t("broker.invitations.new.title")}</h1>
       <p className="text-sm text-gray-500">
-        We&apos;ll generate a tokenized signup link. You can send it via WhatsApp from the
-        invitations list.
+        {t("broker.invitations.new.help")}
       </p>
       <form action={createInvitation} className="space-y-3 bg-white border rounded-lg p-6">
         <div>
-          <label className="block text-sm font-medium mb-1">Client name</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.invitations.new.clientName")}</label>
           <input name="clientName" className="w-full border rounded px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Phone (with country code) *</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.invitations.new.phone")} *</label>
           <input
             name="clientPhone"
             required
@@ -67,11 +67,11 @@ export default async function NewInvitationPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
+          <label className="block text-sm font-medium mb-1">{t("common.email")}</label>
           <input name="clientEmail" type="email" className="w-full border rounded px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Plot of interest (optional)</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.invitations.new.plotOfInterest")}</label>
           <select name="plotId" className="w-full border rounded px-3 py-2 text-sm">
             <option value="">—</option>
             {plots.map((p) => (
@@ -81,7 +81,7 @@ export default async function NewInvitationPage() {
             ))}
           </select>
         </div>
-        <button className="bg-brand text-white px-4 py-2 rounded text-sm">Create invitation</button>
+        <button className="bg-brand text-white px-4 py-2 rounded text-sm">{t("broker.invitations.new.submit")}</button>
       </form>
     </div>
   );

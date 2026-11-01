@@ -1,10 +1,14 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { EXPORTERS, EXPORT_LABELS, type ExportTable } from "@/lib/data-export/exporters";
+import { EXPORTERS, type ExportTable } from "@/lib/data-export/exporters";
+import { formatDateTime, formatNumber } from "@/lib/i18n/format";
+import { getLocale, t } from "@/lib/i18n/server";
 
 export default async function DataExportPage() {
   const user = await requireUser(["broker_admin", "super_admin"]);
+  const locale = getLocale();
 
   // Show row counts so the broker knows what they're about to download
   const [clients, plots, visits, invitations, messages, designs, usage] = await Promise.all([
@@ -36,53 +40,57 @@ export default async function DataExportPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <Link href="/dashboard/settings" className="text-sm text-gray-500 hover:underline">
-          ← Back to settings
+          {t("account.backToSettings")}
         </Link>
-        <h1 className="text-2xl font-bold mt-1">Data export</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Download your organization's data as CSV. Useful for backups, accounting reconciliation,
-          migration to another system, or fulfilling a DPDP/GDPR data subject access request.
-        </p>
+        <h1 className="text-2xl font-bold mt-1">{t("account.export.title")}</h1>
+        <p className="text-gray-500 text-sm mt-1">{t("account.export.intro")}</p>
       </div>
 
       <div className="p-4 bg-blue-50 border border-blue-200 rounded text-sm space-y-2">
-        <div className="font-semibold text-blue-900">Privacy & ownership</div>
+        <div className="font-semibold text-blue-900">{t("account.export.privacyTitle")}</div>
         <ul className="list-disc pl-5 text-blue-900/80 space-y-1">
-          <li>Exports are <strong>org-scoped</strong> — you'll never see another brokerage's data.</li>
-          <li>Files are <strong>UTF-8 with a BOM</strong> so Excel opens them correctly on first try.</li>
-          <li>Cells starting with <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code> get a leading quote to prevent formula injection.</li>
-          <li>Every download is logged in your <strong>org analytics</strong> with timestamp + actor.</li>
+          <li>{fill(t("account.export.privacy1"), <strong>{t("account.export.privacy1Term")}</strong>)}</li>
+          <li>{fill(t("account.export.privacy2"), <strong>{t("account.export.privacy2Term")}</strong>)}</li>
+          <li>
+            {fill(
+              t("account.export.privacy3"),
+              <>
+                <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>
+              </>
+            )}
+          </li>
+          <li>{fill(t("account.export.privacy4"), <strong>{t("account.export.privacy4Term")}</strong>)}</li>
         </ul>
       </div>
 
       <section>
-        <h2 className="font-semibold text-sm mb-2">Available exports</h2>
+        <h2 className="font-semibold text-sm mb-2">{t("account.export.available")}</h2>
         <div className="bg-white border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="p-3 text-left">Table</th>
-                <th className="p-3 text-right">Rows</th>
-                <th className="p-3 text-left">Includes</th>
+                <th className="p-3 text-left">{t("account.export.colTable")}</th>
+                <th className="p-3 text-right">{t("account.export.colRows")}</th>
+                <th className="p-3 text-left">{t("account.export.colIncludes")}</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
             <tbody>
-              {(Object.keys(EXPORTERS) as ExportTable[]).map((t) => (
-                <tr key={t} className="border-t">
-                  <td className="p-3 font-medium">{EXPORT_LABELS[t]}</td>
-                  <td className="p-3 text-right">{counts[t].toLocaleString()}</td>
-                  <td className="p-3 text-gray-500 text-xs">{describe(t)}</td>
+              {(Object.keys(EXPORTERS) as ExportTable[]).map((table) => (
+                <tr key={table} className="border-t">
+                  <td className="p-3 font-medium">{t(`account.export.table.${table}`)}</td>
+                  <td className="p-3 text-right">{formatNumber(counts[table], locale)}</td>
+                  <td className="p-3 text-gray-500 text-xs">{t(`account.export.includes.${table}`)}</td>
                   <td className="p-3 text-right">
-                    {counts[t] > 0 ? (
+                    {counts[table] > 0 ? (
                       <a
-                        href={`/api/data-export/${t}`}
+                        href={`/api/data-export/${table}`}
                         className="text-xs px-3 py-1.5 border rounded bg-white hover:bg-gray-50 inline-block"
                       >
                         ⬇ CSV
                       </a>
                     ) : (
-                      <span className="text-xs text-gray-400">no data</span>
+                      <span className="text-xs text-gray-400">{t("account.export.noData")}</span>
                     )}
                   </td>
                 </tr>
@@ -94,17 +102,26 @@ export default async function DataExportPage() {
 
       {previousExports.length > 0 && (
         <section>
-          <h2 className="font-semibold text-sm mb-2">Recent export activity</h2>
+          <h2 className="font-semibold text-sm mb-2">{t("account.export.recent")}</h2>
           <div className="bg-white border rounded-lg divide-y">
             {previousExports.map((e) => {
               const meta = (e.metadata as any) || {};
+              const tableLabel =
+                meta.table in EXPORTERS || meta.table === "audit_log"
+                  ? t(`account.export.table.${meta.table}`)
+                  : meta.table;
               return (
                 <div key={e.id} className="p-3 text-xs flex justify-between text-gray-600">
                   <span>
-                    📥 <strong>{meta.table}</strong> exported{" "}
-                    {meta.sizeBytes ? `(${formatBytes(meta.sizeBytes)})` : ""}
+                    📥{" "}
+                    {fill(
+                      t("account.export.exported", {
+                        size: meta.sizeBytes ? ` (${formatBytes(meta.sizeBytes)})` : "",
+                      }),
+                      <strong>{tableLabel}</strong>
+                    )}
                   </span>
-                  <span>{new Date(e.createdAt).toLocaleString()}</span>
+                  <span>{formatDateTime(e.createdAt, locale)}</span>
                 </div>
               );
             })}
@@ -115,18 +132,16 @@ export default async function DataExportPage() {
   );
 }
 
-function describe(t: ExportTable): string {
+/** Puts `node` where a translated string has its one remaining {placeholder}. */
+function fill(template: string, node: ReactNode) {
+  const [before, after] = template.split(/\{\w+\}/);
   return (
-    {
-      clients: "name, phone, email, owner agent, signup date",
-      plots: "title, location, lat/lng, size, price, status, photo count, description",
-      visits: "scheduled at, status, client + plot + agent, rating, notes, feedback",
-      invitations: "client contact, status, sent by, expiry, accepted-at",
-      messages: "channel, status, sender, recipient, body (last 10k)",
-      designs: "type, plot, sqft, floors, lead info, cache hits, claim status",
-      usage: "service kind, units, cost (last 10k events)",
-    } as Record<ExportTable, string>
-  )[t];
+    <>
+      {before}
+      {node}
+      {after}
+    </>
+  );
 }
 
 function formatBytes(n: number): string {

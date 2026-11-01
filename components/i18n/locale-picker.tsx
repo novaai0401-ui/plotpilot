@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/dict";
+import { useT } from "@/lib/i18n/client";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 
 /**
  * Small dropdown that writes the locale cookie and reloads.
@@ -9,13 +11,14 @@ import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/dict";
  */
 export function LocalePicker({ current }: { current: Locale }) {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   async function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const locale = e.target.value;
     if (locale === current) return;
     setBusy(true);
-    await fetch("/api/i18n/set-locale", {
+    await csrfFetch("/api/i18n/set-locale", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ locale }),
@@ -32,7 +35,7 @@ export function LocalePicker({ current }: { current: Locale }) {
       disabled={busy}
       aria-busy={busy}
       className="text-xs border rounded px-1.5 py-0.5 bg-white"
-      aria-label="Language"
+      aria-label={t("common.language")}
     >
       {LOCALES.map((l) => (
         <option key={l} value={l}>

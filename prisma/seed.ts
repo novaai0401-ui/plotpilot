@@ -1,7 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "crypto";
+import { hashPassword } from "../lib/auth/native/password";
+import { runDailyInsights } from "../lib/insights/service";
+import { buildSampleHistory } from "./sample-history";
 
 const prisma = new PrismaClient();
+
+// Shared login for the seeded demo users. Demo data only — override with
+// DEMO_PASSWORD on any database reachable from the internet.
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || "Demo@12345";
 
 async function main() {
   console.log("Seeding...");
@@ -10,7 +17,7 @@ async function main() {
     where: { slug: "demo-brokerage" },
     update: {},
     create: {
-      name: "Demo Brokerage",
+      name: "Vasundhara Plots & Estates (Demo)",
       slug: "demo-brokerage",
       plan: "pro",
       whatsappMode: "hybrid",
@@ -60,6 +67,16 @@ async function main() {
     },
   });
 
+  // Native auth needs an AuthCredential row; without it these users can't log in.
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
+  for (const userId of [broker.id, client.id]) {
+    await prisma.authCredential.upsert({
+      where: { userId },
+      update: { passwordHash },
+      create: { userId, passwordHash, emailVerifiedAt: new Date() },
+    });
+  }
+
   await prisma.invitation.create({
     data: {
       orgId: org.id,
@@ -91,7 +108,40 @@ async function main() {
     ],
   });
 
+  await seedSampleHistory(org.id, broker.id);
+
   console.log("Done. Org:", org.slug);
+}
+
+/** Labelled demo history for AI insights. Safe to re-run: skipped if already there. */
+async function seedSampleHistory(orgId: string, brokerId: string) {
+  const alreadySeeded = await prisma.plot.findUnique({ where: { id: "sample-plot-0" } });
+  if (alreadySeeded) return;
+
+  const agent = await prisma.user.create({
+    data: {
+      authId: "sample-agent-auth-id",
+      orgId,
+      role: "broker_agent",
+      name: "Neha Verma",
+      email: "neha@demo.test",
+      phone: "+910000099999",
+    },
+  });
+
+  const now = new Date();
+  const history = buildSampleHistory(orgId, [brokerId, agent.id], now);
+  await prisma.organization.update({ where: { id: orgId }, data: { behaviorTrackingEnabled: true } });
+  await prisma.plot.createMany({ data: history.plots });
+  await prisma.user.createMany({ data: history.clients });
+  await prisma.visit.createMany({ data: history.visits });
+  await prisma.message.createMany({ data: history.messages });
+  await prisma.analyticsEvent.createMany({ data: history.events });
+  await prisma.staffActivity.createMany({ data: history.activity });
+  await prisma.invitation.createMany({ data: history.invitations });
+
+  const result = await runDailyInsights(orgId, now);
+  console.log("Sample history ready:", result);
 }
 
 main()

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { prisma } from "@/lib/db/prisma";
 import { verifyTeamInviteToken } from "@/lib/auth/team-invite-token";
+import { t } from "@/lib/i18n/server";
 import { SignupForm } from "./signup-form";
 
 /**
@@ -47,14 +48,15 @@ async function resolveTeamPreview(token: string): Promise<TeamPreview> {
   const result = await Promise.resolve(verifyTeamInviteToken(token));
   if (!result.ok) {
     if (/expired/i.test(result.error)) return { kind: "team", status: "expired" };
-    return { kind: "team", status: "invalid", reason: result.error };
+    // The verifier's own reasons are technical, so show the plain explanation instead.
+    return { kind: "team", status: "invalid", reason: t("public.invite.malformed") };
   }
   const org = await prisma.organization.findUnique({
     where: { id: result.payload.orgId },
     select: { name: true },
   });
   if (!org) {
-    return { kind: "team", status: "invalid", reason: "Inviting organization no longer exists." };
+    return { kind: "team", status: "invalid", reason: t("public.invite.orgGone") };
   }
   return {
     kind: "team",
@@ -75,9 +77,9 @@ async function resolveClientPreview(token: string): Promise<ClientPreview> {
       org: { select: { name: true } },
     },
   });
-  if (!inv) return { kind: "client", status: "invalid", reason: "Invite link not found." };
+  if (!inv) return { kind: "client", status: "invalid", reason: t("public.invite.notFound") };
   if (inv.status !== "pending") {
-    return { kind: "client", status: "invalid", reason: `This invite has already been ${inv.status}.` };
+    return { kind: "client", status: "invalid", reason: t(`public.invite.already.${inv.status}`) };
   }
   if (inv.expiresAt < new Date()) return { kind: "client", status: "expired" };
   return { kind: "client", status: "valid", orgName: inv.org.name, expiresAt: inv.expiresAt };

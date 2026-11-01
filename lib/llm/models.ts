@@ -16,7 +16,7 @@ import type { OrgPlan } from "@prisma/client";
  * module — don't call Anthropic at all."
  */
 
-export type LlmKind = "pitch" | "valuation";
+export type LlmKind = "pitch" | "valuation" | "insight";
 
 export type LlmModelChoice = {
   /** Anthropic model identifier, or null to skip the API entirely. */
@@ -33,6 +33,9 @@ const SONNET = "claude-sonnet-4-5";
 export function chooseModel(plan: OrgPlan, kind: LlmKind): LlmModelChoice {
   if (plan === "free") {
     return { model: null, maxTokens: 0, reason: "free plan — heuristic only" };
+  }
+  if (kind === "insight") {
+    return { model: HAIKU, maxTokens: 500, reason: `${plan} plan — haiku for insights` };
   }
   if (plan === "pro") {
     if (kind === "pitch") return { model: HAIKU, maxTokens: 350, reason: "pro plan — haiku for pitch" };

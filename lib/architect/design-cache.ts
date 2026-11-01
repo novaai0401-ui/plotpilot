@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db/prisma";
+import type { Locale } from "@/lib/i18n/dict";
 import type { Requirements } from "./requirements";
 
 /**
@@ -42,9 +43,11 @@ function stableStringify(value: unknown): string {
   );
 }
 
-function canonicalizeForNarrative(r: Requirements): string {
+function canonicalizeForNarrative(r: Requirements, locale: Locale): string {
   const pick = {
     v: RULES_VERSION,
+    // Omitted for English so narratives cached before translation stay valid.
+    ...(locale === "en" ? {} : { locale }),
     projectType: r.projectType,
     plot: {
       totalSqft: roundTo(r.plot.totalSqft, 100),
@@ -80,15 +83,15 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-export function narrativeHash(r: Requirements): string {
-  return sha256(canonicalizeForNarrative(r));
+export function narrativeHash(r: Requirements, locale: Locale = "en"): string {
+  return sha256(canonicalizeForNarrative(r, locale));
 }
 export function renderHash(r: Requirements): string {
   return sha256(canonicalizeForRender(r));
 }
 
-export async function getCachedNarrative(r: Requirements): Promise<string | null> {
-  const hash = narrativeHash(r);
+export async function getCachedNarrative(r: Requirements, locale: Locale = "en"): Promise<string | null> {
+  const hash = narrativeHash(r, locale);
   const row = await prisma.designCache.findUnique({ where: { kind_hash: { kind: "narrative", hash } } });
   if (!row || row.expiresAt < new Date()) return null;
   // Increment hit counter (best-effort)
@@ -98,8 +101,13 @@ export async function getCachedNarrative(r: Requirements): Promise<string | null
   return row.payload;
 }
 
-export async function setCachedNarrative(r: Requirements, narrative: string, metadata?: any) {
-  const hash = narrativeHash(r);
+export async function setCachedNarrative(
+  r: Requirements,
+  narrative: string,
+  metadata?: any,
+  locale: Locale = "en"
+) {
+  const hash = narrativeHash(r, locale);
   const expiresAt = new Date(Date.now() + TTL_DAYS * 24 * 60 * 60 * 1000);
   await prisma.designCache.upsert({
     where: { kind_hash: { kind: "narrative", hash } },

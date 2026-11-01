@@ -1,5 +1,7 @@
 "use client";
 import { ThemeProvider, TkxToastProvider } from "@/components/tkx-dyn";
+import { LocaleProvider } from "@/lib/i18n/client";
+import type { Locale } from "@/lib/i18n/dict";
 import type { ResolvedTheme } from "@/lib/theme";
 
 /**
@@ -14,13 +16,17 @@ import type { ResolvedTheme } from "@/lib/theme";
 export function Providers({
   children,
   theme,
+  locale,
 }: {
   children: React.ReactNode;
   theme: ResolvedTheme;
+  locale: Locale;
 }) {
   return (
-    <ThemeProvider mode={theme}>
-      <TkxToastProvider position="top-right">{children}</TkxToastProvider>
-    </ThemeProvider>
+    <LocaleProvider locale={locale}>
+      <ThemeProvider mode={theme}>
+        <TkxToastProvider position="top-right">{children}</TkxToastProvider>
+      </ThemeProvider>
+    </LocaleProvider>
   );
 }

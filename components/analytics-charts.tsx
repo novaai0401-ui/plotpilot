@@ -10,6 +10,7 @@
  * If TkxLineChart ever lacks a feature we need, fallback is `import { LineChart } from "recharts"`.
  */
 import { TkxLineChart, type TkxLineChartProps } from "tekivex-ui/charts";
+import { useT } from "@/lib/i18n/client";
 
 // TkxLineChartSeries IS exported in the source but not re-exported from
 // tekivex-ui/charts/index — filed upstream as tekivex-ui#32. Derive it from
@@ -20,7 +21,20 @@ const COLORS = ["#0f766e", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 type Point = Record<string, string | number>;
 
-export function AnalyticsCharts({ series: data }: { series: Point[] }) {
+export function AnalyticsCharts({
+  series: data,
+  title,
+  emptyText,
+  seriesLabels = {},
+}: {
+  series: Point[];
+  title?: string;
+  emptyText?: string;
+  seriesLabels?: Record<string, string>;
+}) {
+  const t = useT();
+  const heading = title ?? t("account.analytics.dailyActivity");
+
   // Discover the numeric series keys (everything except the x-axis "day").
   const keys = Array.from(
     new Set(data.flatMap((p) => Object.keys(p).filter((k) => k !== "day")))
@@ -29,14 +43,14 @@ export function AnalyticsCharts({ series: data }: { series: Point[] }) {
   if (data.length === 0) {
     return (
       <div className="bg-white border rounded-lg p-8 text-center text-sm text-gray-500">
-        No activity in the last 30 days.
+        {emptyText ?? t("account.analytics.noActivity")}
       </div>
     );
   }
 
   const chartSeries: TkxLineChartSeries[] = keys.map((k, i) => ({
     key: k,
-    label: k,
+    label: seriesLabels[k] ?? k,
     color: COLORS[i % COLORS.length],
     strokeWidth: 2,
     dot: false,
@@ -44,7 +58,7 @@ export function AnalyticsCharts({ series: data }: { series: Point[] }) {
 
   return (
     <div className="bg-white border rounded-lg p-4">
-      <h3 className="font-semibold text-sm mb-3">Daily activity</h3>
+      <h3 className="font-semibold text-sm mb-3">{heading}</h3>
       <TkxLineChart
         data={data}
         series={chartSeries}
@@ -54,7 +68,7 @@ export function AnalyticsCharts({ series: data }: { series: Point[] }) {
         showGrid
         showLegend
         showTooltip
-        ariaLabel="Daily activity over the last 30 days"
+        ariaLabel={heading}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { t } from "@/lib/i18n/server";
 
 async function createVisit(formData: FormData) {
   "use server";
@@ -51,12 +52,12 @@ export default async function NewVisitPage() {
 
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="text-2xl font-bold">Schedule a visit</h1>
+      <h1 className="text-2xl font-bold">{t("broker.visits.new.title")}</h1>
       <form action={createVisit} className="space-y-3 bg-white border rounded-lg p-6">
         <div>
-          <label className="block text-sm font-medium mb-1">Client *</label>
+          <label className="block text-sm font-medium mb-1">{t("common.client")} *</label>
           <select name="clientId" required className="w-full border rounded px-3 py-2 text-sm">
-            <option value="">Select client</option>
+            <option value="">{t("broker.visits.new.selectClient")}</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} — {c.phone}
@@ -65,14 +66,14 @@ export default async function NewVisitPage() {
           </select>
           {clients.length === 0 && (
             <p className="text-xs text-yellow-700 mt-1">
-              No clients yet. Invite one first from Invitations → New.
+              {t("broker.visits.new.noClients")}
             </p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Plot *</label>
+          <label className="block text-sm font-medium mb-1">{t("common.plot")} *</label>
           <select name="plotId" required className="w-full border rounded px-3 py-2 text-sm">
-            <option value="">Select plot</option>
+            <option value="">{t("broker.visits.new.selectPlot")}</option>
             {plots.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.title} — {p.location}
@@ -81,7 +82,7 @@ export default async function NewVisitPage() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Date &amp; time *</label>
+          <label className="block text-sm font-medium mb-1">{t("broker.visits.new.dateTime")} *</label>
           <input
             name="scheduledAt"
             type="datetime-local"
@@ -90,10 +91,10 @@ export default async function NewVisitPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Notes</label>
+          <label className="block text-sm font-medium mb-1">{t("common.notes")}</label>
           <textarea name="notes" rows={3} className="w-full border rounded px-3 py-2 text-sm" />
         </div>
-        <button className="bg-brand text-white px-4 py-2 rounded text-sm">Schedule</button>
+        <button className="bg-brand text-white px-4 py-2 rounded text-sm">{t("broker.visits.new.submit")}</button>
       </form>
     </div>
   );

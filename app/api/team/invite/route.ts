@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { appUrl } from "@/lib/app-url";
 import { createTeamInviteToken } from "@/lib/auth/team-invite-token";
 import { sendEmail } from "@/lib/email/resend";
 import { checkRateLimit, persistRateLimitDenial } from "@/lib/rate-limit";
@@ -71,8 +72,7 @@ export async function POST(req: NextRequest) {
     role,
     expiresInDays: 14,
   });
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const link = `${appUrl}/signup?team=${token}`;
+  const link = `${appUrl()}/signup?team=${token}`;
 
   const org = await prisma.organization.findUnique({ where: { id: user.orgId } });
   const orgName = org?.name || "your team";
@@ -129,7 +129,6 @@ export async function POST(req: NextRequest) {
     role,
     link, // returned so the inviter can copy-share if email failed (e.g. no Resend key in dev)
     emailDelivered: emailResult.ok,
-    emailError: emailResult.ok ? null : (emailResult as any).error,
   });
 }
 

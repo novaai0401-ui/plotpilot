@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { buildDesignPdf } from "@/lib/architect/export-pdf";
+import { narrativeForLocale } from "@/lib/architect/localize";
 import { sendEmail } from "@/lib/email/resend";
 import {
   leadFollowupHtml,
@@ -88,8 +89,10 @@ export async function GET(req: NextRequest) {
       const pdfBytes = await buildDesignPdf({
         requirements: d.requirements as any,
         brief: d.brief as any,
-        narrative: d.narrative,
-        floorPlansSvg: (d.floorPlansSvg as any) || [],
+        narrative: narrativeForLocale(
+          { requirements: d.requirements as any, brief: d.brief as any, narrative: d.narrative },
+          "en"
+        ),
         renderImageUrl: d.renderImageUrl,
         generatedAt: d.createdAt,
         designId: d.id,

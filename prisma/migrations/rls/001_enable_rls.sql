@@ -31,7 +31,8 @@ DECLARE
   t text;
   tables text[] := ARRAY[
     'User', 'Plot', 'Invitation', 'Visit', 'Message',
-    'WhatsAppConfig', 'AnalyticsEvent'
+    'WhatsAppConfig', 'AnalyticsEvent',
+    'InsightReport', 'InsightSuggestion', 'InsightModel', 'InsightPhrase', 'StaffActivity'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP

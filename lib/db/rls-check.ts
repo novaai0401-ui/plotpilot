@@ -26,6 +26,11 @@ const TENANT_TABLES = [
   "BuildingDesign",
   "Notification",
   "UsageEvent",
+  "InsightReport",
+  "InsightSuggestion",
+  "InsightModel",
+  "InsightPhrase",
+  "StaffActivity",
 ];
 
 export type RlsCheckResult = {

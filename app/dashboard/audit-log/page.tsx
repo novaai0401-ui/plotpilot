@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { KNOWN_EVENT_TYPES, labelForEvent, EVENT_LABELS } from "@/lib/audit-log/events";
+import { formatDateTime, formatNumber } from "@/lib/i18n/format";
+import { getLocale, t } from "@/lib/i18n/server";
 
 const PAGE_SIZE = 50;
 
@@ -11,6 +13,7 @@ export default async function AuditLogPage({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const user = await requireUser([...BROKER_ROLES, "super_admin"]);
+  const locale = getLocale();
 
   const typeFilter = typeof searchParams?.type === "string" ? searchParams.type : "";
   const actorFilter = typeof searchParams?.actor === "string" ? searchParams.actor : "";
@@ -59,31 +62,29 @@ export default async function AuditLogPage({
     <div className="space-y-6 max-w-5xl">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-bold">Audit log</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Every meaningful action in your organization. Append-only — no edits, no deletes.
-          </p>
+          <h1 className="text-2xl font-bold">{t("account.audit.title")}</h1>
+          <p className="text-gray-500 text-sm mt-1">{t("account.audit.intro")}</p>
         </div>
         <a
           href={csvHref}
           className="text-xs px-3 py-1.5 border rounded bg-white hover:bg-gray-50"
-          title="Download filtered events as CSV (same filters as the table below)"
+          title={t("account.audit.downloadTitle")}
         >
-          ⬇ Download filtered CSV
+          {t("account.audit.download")}
         </a>
       </div>
 
       {/* Filter form — all server-side via URL params */}
       <form method="get" className="bg-white border rounded-lg p-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
         <div>
-          <label className="block text-xs font-medium mb-1">Type</label>
+          <label className="block text-xs font-medium mb-1">{t("account.audit.type")}</label>
           <select name="type" defaultValue={typeFilter} className="w-full border rounded px-2 py-1.5 text-sm">
-            <option value="">All types</option>
+            <option value="">{t("account.audit.allTypes")}</option>
             {groupEventTypes().map((g) => (
-              <optgroup key={g.group} label={g.group}>
-                {g.types.map((t) => (
-                  <option key={t} value={t}>
-                    {EVENT_LABELS[t]?.label || t}
+              <optgroup key={g.group} label={t(g.group)}>
+                {g.types.map((type) => (
+                  <option key={type} value={type}>
+                    {t(labelForEvent(type).labelKey)}
                   </option>
                 ))}
               </optgroup>
@@ -91,9 +92,9 @@ export default async function AuditLogPage({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Actor</label>
+          <label className="block text-xs font-medium mb-1">{t("account.audit.actor")}</label>
           <select name="actor" defaultValue={actorFilter} className="w-full border rounded px-2 py-1.5 text-sm">
-            <option value="">All actors</option>
+            <option value="">{t("account.audit.allActors")}</option>
             {actors.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -103,44 +104,46 @@ export default async function AuditLogPage({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">From</label>
+          <label className="block text-xs font-medium mb-1">{t("account.audit.from")}</label>
           <input type="date" name="from" defaultValue={fromFilter} className="w-full border rounded px-2 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">To</label>
+          <label className="block text-xs font-medium mb-1">{t("account.audit.to")}</label>
           <input type="date" name="to" defaultValue={toFilter} className="w-full border rounded px-2 py-1.5 text-sm" />
         </div>
         <div className="flex items-end gap-2">
           <button type="submit" className="bg-brand text-white px-3 py-1.5 rounded text-sm">
-            Apply
+            {t("account.audit.apply")}
           </button>
           <Link href="/dashboard/audit-log" className="text-xs text-gray-500 hover:underline self-center">
-            Clear
+            {t("account.audit.clear")}
           </Link>
         </div>
       </form>
 
       <div className="text-xs text-gray-500">
-        {total.toLocaleString()} {total === 1 ? "event" : "events"} match
-        {typeFilter || actorFilter || fromFilter || toFilter ? " (filtered)" : ""}.
-        {hasNextPage && ` Showing first ${PAGE_SIZE}.`}
+        {t(total === 1 ? "account.audit.count.one" : "account.audit.count.other", {
+          count: formatNumber(total, locale),
+          filtered: typeFilter || actorFilter || fromFilter || toFilter ? t("account.audit.filteredSuffix") : "",
+        })}
+        {hasNextPage && ` ${t("account.audit.showingFirst", { count: PAGE_SIZE })}`}
       </div>
 
       <div className="bg-white border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs uppercase text-gray-500">
             <tr>
-              <th className="p-3 text-left w-44">When</th>
-              <th className="p-3 text-left">Event</th>
-              <th className="p-3 text-left">Actor</th>
-              <th className="p-3 text-left">Details</th>
+              <th className="p-3 text-left w-44">{t("account.audit.colWhen")}</th>
+              <th className="p-3 text-left">{t("account.audit.colEvent")}</th>
+              <th className="p-3 text-left">{t("account.audit.actor")}</th>
+              <th className="p-3 text-left">{t("common.details")}</th>
             </tr>
           </thead>
           <tbody>
             {pageEvents.length === 0 && (
               <tr>
                 <td colSpan={4} className="p-6 text-center text-gray-500">
-                  No events match these filters.
+                  {t("account.audit.empty")}
                 </td>
               </tr>
             )}
@@ -152,15 +155,14 @@ export default async function AuditLogPage({
               return (
                 <tr key={e.id} className="border-t hover:bg-gray-50">
                   <td className="p-3 text-gray-600 whitespace-nowrap">
-                    {new Date(e.createdAt).toLocaleString()}
+                    {formatDateTime(e.createdAt, locale)}
                   </td>
                   <td className="p-3">
                     <span className="mr-1">{lbl.emoji}</span>
-                    <span className="font-medium">{lbl.label}</span>
-                    <span className="text-xs text-gray-400 ml-2 font-mono">{e.type}</span>
+                    <span className="font-medium">{t(lbl.labelKey)}</span>
                   </td>
                   <td className="p-3 text-gray-700">
-                    {actor ? actor.name : <span className="text-gray-400 italic">system</span>}
+                    {actor ? actor.name : <span className="text-gray-400 italic">{t("account.audit.system")}</span>}
                   </td>
                   <td className="p-3 text-xs font-mono text-gray-500 break-all" title={metaStr}>
                     {metaPreview || "—"}
@@ -184,7 +186,7 @@ export default async function AuditLogPage({
             }).toString()}`}
             className="text-sm px-4 py-2 border rounded bg-white hover:bg-gray-50"
           >
-            Next page →
+            {t("account.audit.nextPage")}
           </Link>
         </div>
       )}
@@ -192,12 +194,13 @@ export default async function AuditLogPage({
   );
 }
 
+/** `group` in each result is a dictionary key. */
 function groupEventTypes(): { group: string; types: string[] }[] {
   const groups = new Map<string, string[]>();
-  for (const t of KNOWN_EVENT_TYPES) {
-    const g = EVENT_LABELS[t]?.group ?? "Other";
+  for (const type of KNOWN_EVENT_TYPES) {
+    const g = EVENT_LABELS[type]?.groupKey ?? "account.eventGroup.other";
     if (!groups.has(g)) groups.set(g, []);
-    groups.get(g)!.push(t);
+    groups.get(g)!.push(type);
   }
   return Array.from(groups, ([group, types]) => ({ group, types }));
 }

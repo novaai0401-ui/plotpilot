@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatDate } from "@/lib/i18n/format";
 
 type FactorRow = {
   id: string;
@@ -20,6 +22,9 @@ type FactorRow = {
  */
 export function TotpEnrollment() {
   const supabase = createSupabaseBrowserClient();
+  const t = useT();
+  const locale = useLocale();
+  const [noFactorsBefore, noFactorsAfter] = t("account.security.noFactors").split("{enroll}");
   const [factors, setFactors] = useState<FactorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState<{
@@ -58,7 +63,7 @@ export function TotpEnrollment() {
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
     setBusy(false);
     if (error) return setError(error.message);
-    if (!data) return setError("No enrollment data returned.");
+    if (!data) return setError(t("account.security.noEnrollmentData"));
     setEnrolling({
       factorId: data.id,
       qr: data.totp.qr_code,
@@ -76,7 +81,7 @@ export function TotpEnrollment() {
     });
     if (chalErr || !chal) {
       setBusy(false);
-      return setError(chalErr?.message || "Could not start challenge.");
+      return setError(chalErr?.message || t("account.security.challengeFailed"));
     }
     const { error: verifyErr } = await supabase.auth.mfa.verify({
       factorId: enrolling.factorId,
@@ -85,20 +90,20 @@ export function TotpEnrollment() {
     });
     setBusy(false);
     if (verifyErr) return setError(verifyErr.message);
-    setInfo("✓ 2FA enabled. You'll be asked for a code on next login.");
+    setInfo(t("account.security.enabled"));
     setEnrolling(null);
     setCode("");
     refresh();
   }
 
   async function onRemove(factorId: string) {
-    if (!confirm("Remove this 2FA factor? You'll lose this second-factor protection.")) return;
+    if (!confirm(t("account.security.removeConfirm"))) return;
     setError(null);
     setBusy(true);
     const { error } = await supabase.auth.mfa.unenroll({ factorId });
     setBusy(false);
     if (error) return setError(error.message);
-    setInfo("Factor removed.");
+    setInfo(t("account.security.removed"));
     refresh();
   }
 
@@ -112,10 +117,12 @@ export function TotpEnrollment() {
       )}
 
       {loading ? (
-        <div className="text-sm text-gray-500">Loading…</div>
+        <div className="text-sm text-gray-500">{t("common.loading")}</div>
       ) : factors.length === 0 ? (
         <div className="text-sm text-gray-600">
-          No 2FA factors enrolled. Click <strong>Enroll</strong> below to set up your first one.
+          {noFactorsBefore}
+          <strong>{t("account.security.enroll")}</strong>
+          {noFactorsAfter}
         </div>
       ) : (
         <div className="border rounded">
@@ -127,10 +134,10 @@ export function TotpEnrollment() {
               <div>
                 <div className="font-medium">
                   {f.friendly_name || "TOTP"}{" "}
-                  <span className="text-xs text-gray-500">({f.status})</span>
+                  <span className="text-xs text-gray-500">({t(`account.security.status.${f.status}`)})</span>
                 </div>
                 <div className="text-xs text-gray-500">
-                  {f.created_at ? `Enrolled ${new Date(f.created_at).toLocaleDateString()}` : ""}
+                  {f.created_at ? t("account.security.enrolledOn", { date: formatDate(f.created_at, locale) }) : ""}
                 </div>
               </div>
               <button
@@ -138,7 +145,7 @@ export function TotpEnrollment() {
                 disabled={busy}
                 className="text-xs text-red-600 hover:underline disabled:opacity-50"
               >
-                Remove
+                {t("account.security.remove")}
               </button>
             </div>
           ))}
@@ -151,20 +158,20 @@ export function TotpEnrollment() {
           disabled={busy}
           className="bg-brand text-white px-4 py-2 rounded text-sm hover:bg-brand-dark disabled:opacity-50"
         >
-          {busy ? "Working…" : "+ Enroll authenticator"}
+          {busy ? t("account.security.working") : t("account.security.enrollButton")}
         </button>
       ) : (
         <form onSubmit={onVerify} className="bg-gray-50 border rounded p-4 space-y-3">
           <div>
-            <div className="text-sm font-medium mb-1">1. Scan this QR with your authenticator app:</div>
-            <img src={enrolling.qr} alt="TOTP QR" className="bg-white p-2 border rounded inline-block" />
+            <div className="text-sm font-medium mb-1">{t("account.security.step1")}</div>
+            <img src={enrolling.qr} alt={t("account.security.qrAlt")} className="bg-white p-2 border rounded inline-block" />
           </div>
           <div className="text-xs text-gray-600">
-            Or type the secret manually:{" "}
+            {t("account.security.manualSecret")}{" "}
             <code className="bg-white border px-1 rounded">{enrolling.secret}</code>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">2. Enter the 6-digit code:</label>
+            <label className="block text-sm font-medium mb-1">{t("account.security.step2")}</label>
             <input
               type="text"
               inputMode="numeric"
@@ -183,7 +190,7 @@ export function TotpEnrollment() {
               disabled={busy || code.length !== 6}
               className="bg-brand text-white px-4 py-2 rounded text-sm disabled:opacity-50"
             >
-              {busy ? "Verifying…" : "Verify & enable"}
+              {busy ? t("account.security.verifying") : t("account.security.verifyEnable")}
             </button>
             <button
               type="button"
@@ -193,7 +200,7 @@ export function TotpEnrollment() {
               }}
               className="text-sm text-gray-500 hover:underline"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </form>

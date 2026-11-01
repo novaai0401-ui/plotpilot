@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signup } from "@/lib/auth/native/service";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { formatDateTime } from "@/lib/i18n/format";
+import { t, getLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,7 @@ export async function POST(req: NextRequest) {
   });
   if (!rl.success) {
     return NextResponse.json(
-      { error: `Too many signup attempts. Try again after ${new Date(rl.resetAt).toLocaleTimeString()}.` },
+      { error: t("public.err.tooManySignups", { time: formatDateTime(rl.resetAt, getLocale()) }) },
       { status: 429 }
     );
   }
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ error: t(result.errorKey, result.errorVars) }, { status: result.status });
   }
   return NextResponse.json({
     ok: true,

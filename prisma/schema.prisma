@@ -57,6 +57,10 @@ model Organization {
   // When current billing period ends (used to grant grace until then on downgrades)
   subscriptionEndsAt      DateTime?
 
+  // Opt-in: record which dashboard sections broker staff open. Off until an
+  // admin enables it. Clients and anonymous visitors are never tracked.
+  behaviorTrackingEnabled Boolean @default(false)
+
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -73,6 +77,11 @@ model Organization {
   usageEvents   UsageEvent[]
   llmCaches     LlmCache[]
   oauthApps     OAuthApp[]
+  insightReports     InsightReport[]
+  insightSuggestions InsightSuggestion[]
+  insightModels      InsightModel[]
+  insightPhrases     InsightPhrase[]
+  staffActivity      StaffActivity[]
 }
 
 // ---------- Users & Roles ----------
@@ -205,6 +214,13 @@ enum VisitStatus {
   no_show
 }
 
+// What the visit led to. This is the label the lead-score model learns from.
+enum VisitOutcome {
+  interested
+  not_interested
+  booked
+}
+
 model Visit {
   id           String      @id @default(cuid())
   orgId        String
@@ -220,6 +236,8 @@ model Visit {
   notes        String?
   feedback     String?     // post-visit feedback from client/agent
   rating       Int?        // 1-5 stars from client
+  outcome      VisitOutcome?
+  outcomeAt    DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -382,6 +400,106 @@ model AnalyticsEvent {
   createdAt DateTime @default(now())
 
   @@index([orgId, type, createdAt])
+}
+
+// ---------- AI insights ----------
+
+enum InsightPeriod {
+  week
+  month
+  year
+}
+
+enum SuggestionStatus {
+  open
+  accepted
+  dismissed
+  expired
+}
+
+// One stored report per completed period. `metrics` is the computed numbers;
+// `narrative` is the written summary (LLM or deterministic fallback).
+model InsightReport {
+  id              String        @id @default(cuid())
+  orgId           String
+  org             Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  period          InsightPeriod
+  periodStart     DateTime
+  periodEnd       DateTime
+  metrics         Json
+  narrative       String        @db.Text
+  narrativeSource String        // "llm" | "fallback"
+  createdAt       DateTime      @default(now())
+
+  @@unique([orgId, period, periodStart])
+  @@index([orgId, createdAt])
+}
+
+// `dedupeKey` stops the same suggestion being re-created within its cycle, so
+// a dismissal sticks until the situation is worth raising again.
+model InsightSuggestion {
+  id          String           @id @default(cuid())
+  orgId       String
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  kind        String
+  dedupeKey   String
+  // English copy, for the LLM. The UI renders from `params` in the viewer's language.
+  title       String
+  body        String
+  params      Json?
+  link        String?
+  priority    Float
+  status      SuggestionStatus @default(open)
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@unique([orgId, dedupeKey])
+  @@index([orgId, status, priority])
+  @@index([orgId, kind, status])
+}
+
+// Per-org trained weights. Absent row = the starter weights in lib/insights/scoring.ts.
+model InsightModel {
+  id               String       @id @default(cuid())
+  orgId            String
+  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  kind             String       // "lead_score"
+  weights          Json
+  source           String       // "trained" | "prior"
+  sampleCount      Int
+  positiveCount    Int
+  heldOutAccuracy  Float?
+  baselineAccuracy Float?
+  trainedAt        DateTime     @default(now())
+
+  @@unique([orgId, kind])
+}
+
+// Questions a user taught the local question model (lib/insights/intent-model.ts).
+model InsightPhrase {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  question  String
+  intent    String
+  language  String       // "en" | "hi" | "mr"
+  createdAt DateTime     @default(now())
+
+  @@index([orgId])
+}
+
+// Opt-in staff section views. Kept apart from AnalyticsEvent so high-volume
+// rows don't flood the audit log. Pruned after 180 days by the insights cron.
+model StaffActivity {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId    String
+  path      String       // normalized, e.g. "/dashboard/plots/[id]"
+  createdAt DateTime     @default(now())
+
+  @@index([orgId, createdAt])
 }
 
 // ---------- Architect: building designs ----------

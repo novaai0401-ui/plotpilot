@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { TkxButton } from "@/components/tkx-dyn";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Sign-out — POSTs to the native /api/auth/native/logout, which revokes the
@@ -10,6 +11,7 @@ import { TkxButton } from "@/components/tkx-dyn";
  */
 export function SignOutButton() {
   const router = useRouter();
+  const t = useT();
   return (
     <TkxButton
       type="button"
@@ -27,7 +29,7 @@ export function SignOutButton() {
         router.refresh();
       }}
     >
-      Sign out
+      {t("common.signOut")}
     </TkxButton>
   );
 }

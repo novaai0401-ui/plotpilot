@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
+import { appUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db/prisma";
+import { t } from "@/lib/i18n/server";
 import { buildWaMeUrl, renderTemplate } from "@/lib/whatsapp";
 
 export default async function InvitationsPage() {
@@ -17,17 +19,17 @@ export default async function InvitationsPage() {
     }),
   ]);
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl = appUrl();
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Invitations</h1>
+        <h1 className="text-2xl font-bold">{t("nav.invitations")}</h1>
         <Link
           href="/dashboard/invitations/new"
           className="bg-brand text-white px-4 py-2 rounded text-sm hover:bg-brand-dark"
         >
-          + New invitation
+          {t("broker.invitations.new")}
         </Link>
       </div>
 
@@ -35,28 +37,28 @@ export default async function InvitationsPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
             <tr>
-              <th className="p-3">Client</th>
-              <th className="p-3">Phone</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Sent by</th>
-              <th className="p-3">Actions</th>
+              <th className="p-3">{t("common.client")}</th>
+              <th className="p-3">{t("common.phone")}</th>
+              <th className="p-3">{t("common.status")}</th>
+              <th className="p-3">{t("broker.invitations.sentBy")}</th>
+              <th className="p-3">{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {invites.length === 0 && (
               <tr>
                 <td colSpan={5} className="p-6 text-center text-gray-500">
-                  No invitations yet.
+                  {t("broker.invitations.empty")}
                 </td>
               </tr>
             )}
             {invites.map((i) => {
-              const inviteUrl = `${appUrl}/signup?invite=${i.token}`;
+              const inviteUrl = `${baseUrl}/signup?invite=${i.token}`;
               const template =
                 org?.whatsappConfig?.inviteTemplate ||
-                "Hi {name}, {broker} invites you to view properties. Sign up: {link}";
+                t("broker.invitations.waTemplate");
               const body = renderTemplate(template, {
-                name: i.clientName || "there",
+                name: i.clientName || t("broker.invitations.waNameFallback"),
                 broker: i.sentBy.name,
                 org: org?.name || "",
                 link: inviteUrl,
@@ -75,7 +77,7 @@ export default async function InvitationsPage() {
                           : "bg-gray-200 text-gray-700"
                       }`}
                     >
-                      {i.status}
+                      {t(`status.invitation.${i.status}`)}
                     </span>
                   </td>
                   <td className="p-3 text-gray-500">{i.sentBy.name}</td>
@@ -87,7 +89,7 @@ export default async function InvitationsPage() {
                         rel="noopener noreferrer"
                         className="text-green-600 hover:underline text-xs"
                       >
-                        Send via WhatsApp
+                        {t("broker.invitations.sendWhatsApp")}
                       </a>
                     )}
                   </td>

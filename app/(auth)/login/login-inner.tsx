@@ -20,7 +20,22 @@ type Strings = {
   signingIn: string;
   noOrg: string;
   startFree: string;
+  failed: string;
+  genericError: string;
+  mfaTitle: string;
+  mfaSubtitle: string;
+  mfaFormLabel: string;
+  codeLabel: string;
+  codeHint: string;
+  verify: string;
+  verifying: string;
+  differentAccount: string;
 };
+
+/** Only follow `from` within this site, so a crafted link can't send users elsewhere. */
+function safeRedirect(from: string | null): string {
+  return from && /^\/(?![/\\])/.test(from) ? from : "/dashboard";
+}
 
 type State =
   | { kind: "password" }
@@ -58,15 +73,18 @@ export function LoginInner({ strings }: { strings: Strings }) {
         body: JSON.stringify({ email, password }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      if (!res.ok) {
+        setError(json.error || strings.genericError);
+        return;
+      }
       if (json.mfaRequired) {
         setState({ kind: "mfa", pendingMfaToken: json.pendingMfaToken });
       } else {
-        router.push(params.get("from") || "/dashboard");
+        router.push(safeRedirect(params.get("from")));
         router.refresh();
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch {
+      setError(strings.genericError);
     } finally {
       setLoading(false);
     }
@@ -87,11 +105,14 @@ export function LoginInner({ strings }: { strings: Strings }) {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-      router.push(params.get("from") || "/dashboard");
+      if (!res.ok) {
+        setError(json.error || strings.genericError);
+        return;
+      }
+      router.push(safeRedirect(params.get("from")));
       router.refresh();
-    } catch (e: any) {
-      setError(e.message);
+    } catch {
+      setError(strings.genericError);
     } finally {
       setLoading(false);
     }
@@ -102,17 +123,17 @@ export function LoginInner({ strings }: { strings: Strings }) {
       <div className="w-full max-w-sm">
         <TkxCard variant="elevated" padding="lg">
           <TkxCardHeader
-            title={state.kind === "mfa" ? "Two-factor code" : strings.title}
+            title={state.kind === "mfa" ? strings.mfaTitle : strings.title}
             subtitle={
               state.kind === "mfa"
-                ? "Open your authenticator app and enter the 6-digit code."
+                ? strings.mfaSubtitle
                 : strings.subtitle
             }
           />
           <TkxCardBody>
             <div aria-live="polite" aria-atomic="true">
               {error && (
-                <TkxAlert variant="danger" title="Sign-in failed">
+                <TkxAlert variant="danger" title={strings.failed}>
                   {error}
                 </TkxAlert>
               )}
@@ -166,10 +187,10 @@ export function LoginInner({ strings }: { strings: Strings }) {
                 onSubmit={onMfaSubmit}
                 className="space-y-4"
                 noValidate
-                aria-label="Two-factor verification"
+                aria-label={strings.mfaFormLabel}
               >
                 <TkxInput
-                  label="6-digit code"
+                  label={strings.codeLabel}
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]{6}"
@@ -178,7 +199,7 @@ export function LoginInner({ strings }: { strings: Strings }) {
                   onChange={(e) => setMfaCode(e.target.value)}
                   isRequired
                   autoComplete="one-time-code"
-                  hint="Or enter a 10-char recovery code if you've lost your authenticator."
+                  hint={strings.codeHint}
                 />
                 <TkxButton
                   type="submit"
@@ -186,10 +207,10 @@ export function LoginInner({ strings }: { strings: Strings }) {
                   colorScheme="primary"
                   isFullWidth
                   isLoading={loading}
-                  loadingText="Verifying…"
+                  loadingText={strings.verifying}
                   disabled={loading || mfaCode.length < 6}
                 >
-                  Verify
+                  {strings.verify}
                 </TkxButton>
                 <button
                   type="button"
@@ -199,7 +220,7 @@ export function LoginInner({ strings }: { strings: Strings }) {
                     setState({ kind: "password" });
                   }}
                 >
-                  ← Use a different account
+                  ← {strings.differentAccount}
                 </button>
               </form>
             )}

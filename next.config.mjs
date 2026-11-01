@@ -24,7 +24,12 @@ const nextConfig = {
     // Native addons (`.node` binaries) cannot be parsed by webpack. Keep them as
     // runtime requires on the server. @resvg/resvg-js ships a per-platform binary
     // for SVG rasterization in the PDF export pipeline.
-    serverComponentsExternalPackages: ["@resvg/resvg-js"],
+    serverComponentsExternalPackages: ["@resvg/resvg-js", "fontkit"],
+    // PDF text is drawn from these fonts, read from disk at request time.
+    outputFileTracingIncludes: {
+      "/api/architect/export/[id]/pdf": ["./assets/fonts/**"],
+      "/api/cron/lead-followups": ["./assets/fonts/**"],
+    },
   },
   // tekivex-ui ships both ESM and CJS but Next's default resolution picks the wrong
   // one in some contexts, producing webpack "Cannot read properties of undefined

@@ -365,6 +365,25 @@ Backend: `@upstash/ratelimit` if `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TO
 UPDATE "User" SET role = 'super_admin' WHERE email = 'you@example.com';
 ```
 
+## AI insights
+
+`/dashboard/insights` gives brokers weekly, monthly and yearly reports, lead scores, next-step suggestions, and a box for asking questions in English or Hindi.
+
+- **Reports** (`lib/insights/metrics.ts`, `periods.ts`) — completed Mon-Sun weeks, calendar months and calendar years in IST, each compared with the period before. Every figure is computed without an LLM; the LLM only writes the summary, and a deterministic summary is used on the free plan, without `ANTHROPIC_API_KEY`, or over budget.
+- **Lead scores** (`lib/insights/scoring.ts`) — per-org logistic regression. It uses starter weights until there are 30 finished outcomes with both bookings and losses, then retrains daily, pulled toward those weights so small orgs don't overfit. Outcomes come from the "How did it go?" buttons on a completed visit, so scores can't learn unless brokers use them.
+- **Suggestions** (`lib/insights/suggestions.ts`) — rules decide what can be suggested; each org's Done / Not useful clicks decide how each kind ranks.
+- **Languages** — English, Hindi and Marathi for this page. Marathi strings live in `lib/i18n/marathi.ts`.
+- **Smart answers** (`lib/insights/ask.ts`) — the LLM sees only computed figures, never the database. Client and agent names are replaced with aliases before sending and restored in the reply; phone numbers are never sent.
+- **Staff section tracking** — off by default (Settings → AI insights). Stores normalized paths without record ids for 180 days. Clients and website visitors are not tracked.
+
+`GET /api/cron/insights` runs daily with `Authorization: Bearer $CRON_SECRET` and refuses to run if the secret is unset. On Render, schedule it externally, like the other crons.
+
+`npm run db:seed` loads three years of realistic invented history for demos, in English, Hindi and Marathi. `npm run db:reset-demo` removes it and touches only the `demo-brokerage` org. Phone numbers start `+91 0` and emails use `example.com`, so nobody real can be contacted. Accuracy on that data shows the pipeline works; it says nothing about accuracy on real brokerages.
+
+Questions are sorted by a small classifier in `lib/insights/intent-model.ts` that runs in-process and learns from each org's corrections. It only picks a topic; free-form replies need `ANTHROPIC_API_KEY`.
+
+Developer screens (OAuth apps, authorized apps, WhatsApp API setup) are hidden unless `NEXT_PUBLIC_SHOW_DEVELOPER_TOOLS=true` at build time.
+
 ## Internationalization (English + Hindi)
 
 The app ships English by default with a Hindi (हिंदी) translation. Locale picker lives in the dashboard sidebar and the landing-page header. Selection is persisted in a `plotbroker_locale` cookie (1 year).

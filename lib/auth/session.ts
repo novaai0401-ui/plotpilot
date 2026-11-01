@@ -40,7 +40,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
  */
 export async function requireUser(allowed?: Role[]): Promise<SessionUser> {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
+  // `expired` tells middleware not to bounce a dead session cookie back here.
+  if (!user) redirect("/login?expired=1");
   if (allowed && !allowed.includes(user.role)) redirect("/forbidden");
   return user;
 }

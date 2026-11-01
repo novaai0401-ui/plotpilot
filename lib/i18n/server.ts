@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { DEFAULT_LOCALE, LOCALES, type Locale, translate } from "./dict";
+import { DEFAULT_LOCALE, format, LOCALES, type Locale, translate } from "./dict";
 
 /**
  * Server-side locale resolution. Reads `plotbroker_locale` cookie, falls back
@@ -16,6 +16,6 @@ export function getLocale(): Locale {
 }
 
 /** Convenience wrapper bound to the current request's locale. */
-export function t(key: string): string {
-  return translate(key, getLocale());
+export function t(key: string, vars?: Record<string, string | number>): string {
+  return vars ? format(key, getLocale(), vars) : translate(key, getLocale());
 }

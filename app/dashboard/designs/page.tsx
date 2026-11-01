@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { t, getLocale } from "@/lib/i18n/server";
+import { formatDateTime } from "@/lib/i18n/format";
 
 export default async function DesignsListPage() {
   const user = await requireUser(BROKER_ROLES);
+  const locale = getLocale();
   const designs = await prisma.buildingDesign.findMany({
     where: { orgId: user.orgId },
     orderBy: { createdAt: "desc" },
@@ -13,19 +16,19 @@ export default async function DesignsListPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Building designs</h1>
+        <h1 className="text-2xl font-bold">{t("design.list.title")}</h1>
         <Link
           href="/dashboard/designs/new"
           className="bg-brand text-white px-4 py-2 rounded text-sm hover:bg-brand-dark"
         >
-          + New design
+          {t("design.list.new")}
         </Link>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
         {designs.length === 0 && (
           <div className="col-span-full p-8 text-center text-gray-500 bg-white border rounded">
-            No designs yet. Start one from a plot or click "+ New design".
+            {t("design.list.empty")}
           </div>
         )}
         {designs.map((d) => {
@@ -39,13 +42,17 @@ export default async function DesignsListPage() {
             >
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="font-semibold">{req?.projectType || "—"}</div>
+                  <div className="font-semibold">
+                    {req?.projectType ? t(`design.projectType.${req.projectType}`) : "—"}
+                  </div>
                   <div className="text-xs text-gray-500">
-                    {brief?.summary?.totalSqftPlot} sqft · {brief?.summary?.floors} floor(s) · {d.source}
+                    {t("design.sqftValue", { value: brief?.summary?.totalSqftPlot ?? "" })} ·{" "}
+                    {t("design.list.floors", { count: brief?.summary?.floors ?? "" })} ·{" "}
+                    {t(`design.source.${d.source}`)}
                   </div>
                   {d.plot && (
                     <div className="text-xs text-gray-500 mt-1">
-                      For plot: <strong>{d.plot.title}</strong>
+                      {t("design.list.forPlot")} <strong>{d.plot.title}</strong>
                     </div>
                   )}
                 </div>
@@ -58,11 +65,11 @@ export default async function DesignsListPage() {
                       : "bg-yellow-100 text-yellow-700"
                   }`}
                 >
-                  {d.status}
+                  {t(`design.status.${d.status}`)}
                 </span>
               </div>
               <div className="text-xs text-gray-400 mt-2">
-                {new Date(d.createdAt).toLocaleString()}
+                {formatDateTime(d.createdAt, locale)}
               </div>
             </Link>
           );

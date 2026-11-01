@@ -77,6 +77,8 @@ export type DesignBrief = {
   codeNotes: string[];
   costEstimateInr?: { low: number; high: number; perSqftInr: number };
   warnings: string[];
+  /** True when the saved narrative is the plain fallback, so it can be rebuilt per language. */
+  narrativeFallback?: boolean;
 };
 
 // Standard room dimensions (in feet) — { min, ideal }

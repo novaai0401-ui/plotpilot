@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import {
   TkxAlert,
   TkxButton,
@@ -74,7 +75,7 @@ export function DeveloperDashboard({
     setError(null);
     setCreating(true);
     try {
-      const res = await fetch("/api/developer/apps", {
+      const res = await csrfFetch("/api/developer/apps", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -103,7 +104,7 @@ export function DeveloperDashboard({
 
   async function revoke(appId: string) {
     if (!confirm("Revoke this app? All issued tokens will be invalidated immediately.")) return;
-    const res = await fetch(`/api/developer/apps/${appId}`, { method: "DELETE" });
+    const res = await csrfFetch(`/api/developer/apps/${appId}`, { method: "DELETE" });
     if (res.ok) setApps((prev) => prev.filter((a) => a.id !== appId));
   }
 

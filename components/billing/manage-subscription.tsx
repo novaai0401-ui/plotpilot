@@ -1,9 +1,12 @@
 "use client";
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import { useRouter } from "next/navigation";
 import { TkxButton, TkxBadge, useToast } from "@/components/tkx-dyn";
 import { UpgradeModal, type CapInfo } from "./upgrade-modal";
 import type { OrgPlan } from "@prisma/client";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatDate } from "@/lib/i18n/format";
 
 export function ManageSubscription({
   plan,
@@ -20,6 +23,8 @@ export function ManageSubscription({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const [capInfo, setCapInfo] = useState<CapInfo | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,18 +40,19 @@ export function ManageSubscription({
   }
 
   async function onCancel() {
-    if (!confirm("Cancel subscription? You'll keep access until the end of the current billing period.")) return;
+    if (!confirm(t("account.billing.cancelConfirm"))) return;
     setBusy(true);
-    const res = await fetch("/api/billing/cancel", { method: "POST" });
+    const res = await csrfFetch("/api/billing/cancel", { method: "POST" });
     const j = await res.json();
     setBusy(false);
     if (!res.ok) {
-      toast({ title: "Cancel failed", description: j.error || "Try again later", variant: "danger" });
+      const description = res.status === 503 ? t("account.billing.unavailable") : j.error || t("account.billing.tryLater");
+      toast({ title: t("account.billing.cancelFailed"), description, variant: "danger" });
       return;
     }
     toast({
-      title: "Subscription cancelled",
-      description: j.willEndAt ? `Access continues until ${new Date(j.willEndAt).toLocaleDateString()}.` : undefined,
+      title: t("account.billing.cancelled"),
+      description: j.willEndAt ? t("account.billing.accessUntil", { date: formatDate(j.willEndAt, locale) }) : undefined,
       variant: "info",
     });
     router.refresh();
@@ -58,29 +64,29 @@ export function ManageSubscription({
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         {plan === "free" && (
           <TkxButton variant="solid" colorScheme="primary" onClick={() => openUpgrade("pro")}>
-            Upgrade to Pro
+            {t("account.billing.upgradeTo", { plan: t("account.plan.pro") })}
           </TkxButton>
         )}
         {plan === "pro" && (
           <>
             <TkxButton variant="solid" colorScheme="primary" onClick={() => openUpgrade("enterprise")}>
-              Upgrade to Enterprise
+              {t("account.billing.upgradeTo", { plan: t("account.plan.enterprise") })}
             </TkxButton>
             {subscriptionStatus === "active" && (
-              <TkxButton variant="outline" colorScheme="secondary" isLoading={busy} loadingText="Cancelling…" onClick={onCancel}>
-                Cancel subscription
+              <TkxButton variant="outline" colorScheme="secondary" isLoading={busy} loadingText={t("account.billing.cancelling")} onClick={onCancel}>
+                {t("account.billing.cancelSubscription")}
               </TkxButton>
             )}
           </>
         )}
         {plan === "enterprise" && subscriptionStatus === "active" && (
-          <TkxButton variant="outline" colorScheme="secondary" isLoading={busy} loadingText="Cancelling…" onClick={onCancel}>
-            Cancel subscription
+          <TkxButton variant="outline" colorScheme="secondary" isLoading={busy} loadingText={t("account.billing.cancelling")} onClick={onCancel}>
+            {t("account.billing.cancelSubscription")}
           </TkxButton>
         )}
         {subscriptionStatus === "cancelled" && (
           <TkxBadge variant="warning" size="md" outlined>
-            Cancelled — access continues until period ends
+            {t("account.billing.cancelledBadge")}
           </TkxBadge>
         )}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import {
   TkxAlert,
   TkxButton,
@@ -32,7 +33,7 @@ export function IntegrationsList({ tokens: initial }: { tokens: TokenRow[] }) {
     setBusyId(t.id);
     setError(null);
     try {
-      const res = await fetch(`/api/integrations/${t.id}`, { method: "DELETE" });
+      const res = await csrfFetch(`/api/integrations/${t.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       setTokens((prev) => prev.filter((x) => x.id !== t.id));
     } catch (e: any) {

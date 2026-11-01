@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Read the live values of the WhatsApp credential inputs and probe Meta's Graph API
@@ -9,6 +11,7 @@ import { useState } from "react";
  * committing the settings update.
  */
 export function WhatsAppTestButton() {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<
     | null
@@ -29,19 +32,18 @@ export function WhatsAppTestButton() {
       setBusy(false);
       setResult({
         ok: false,
-        error:
-          "Test requires the actual token (we don't decrypt the stored one for testing). Paste a fresh token to verify, or save without testing.",
+        error: t("account.whatsappTest.needToken"),
       });
       return;
     }
     if (!phoneNumberId || !accessTokenRaw) {
       setBusy(false);
-      setResult({ ok: false, error: "Fill both phoneNumberId and accessToken first." });
+      setResult({ ok: false, error: t("account.whatsappTest.fillBoth") });
       return;
     }
 
     try {
-      const res = await fetch("/api/whatsapp/test-connection", {
+      const res = await csrfFetch("/api/whatsapp/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumberId, accessToken: accessTokenRaw }),
@@ -49,7 +51,7 @@ export function WhatsAppTestButton() {
       const j = await res.json();
       setResult(j);
     } catch (e: any) {
-      setResult({ ok: false, error: e?.message || "Network error." });
+      setResult({ ok: false, error: e?.message || t("account.whatsappTest.networkError") });
     } finally {
       setBusy(false);
     }
@@ -63,7 +65,7 @@ export function WhatsAppTestButton() {
         disabled={busy}
         className="text-xs px-3 py-1.5 border rounded bg-white hover:bg-gray-50 disabled:opacity-50"
       >
-        {busy ? "Testing…" : "🧪 Test connection (free, no message sent)"}
+        {busy ? t("account.whatsappTest.testing") : t("account.whatsappTest.button")}
       </button>
       {result && (
         <div
@@ -78,13 +80,13 @@ export function WhatsAppTestButton() {
               <strong>✓ {result.message}</strong>
               {result.phoneNumber && (
                 <div className="mt-1 text-green-700">
-                  Phone: {result.phoneNumber} {result.verifiedName ? `· ${result.verifiedName}` : ""}
+                  {t("account.whatsappTest.phone", { phone: result.phoneNumber })} {result.verifiedName ? `· ${result.verifiedName}` : ""}
                 </div>
               )}
             </>
           ) : (
             <>
-              <strong>✗ Failed:</strong> {result.error}
+              <strong>{t("account.whatsappTest.failed")}</strong> {result.error}
             </>
           )}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import {
   TkxAlert,
   TkxButton,
@@ -30,7 +31,7 @@ export function AuthorizeConsent({
     setSubmitting(action);
     setError(null);
     try {
-      const res = await fetch("/api/oauth/authorize", {
+      const res = await csrfFetch("/api/oauth/authorize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

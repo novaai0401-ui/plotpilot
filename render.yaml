@@ -4,8 +4,9 @@
 # This deploys the Next.js web service only. Postgres is hosted on Supabase
 # (set DATABASE_URL / DIRECT_URL), so no Render database is created.
 #
-# The two scheduled jobs from vercel.json (/api/cron/lead-followups hourly,
-# /api/cron/visit-reminders daily 09:00 UTC) are NOT created here to stay under
+# The scheduled jobs from vercel.json (/api/cron/lead-followups hourly,
+# /api/cron/visit-reminders daily 09:00 UTC, /api/cron/insights daily 00:30 UTC)
+# are NOT created here to stay under
 # the workspace service limit. Schedule them with a free external scheduler
 # (e.g. cron-job.org) hitting those URLs with header:
 #   Authorization: Bearer <CRON_SECRET>

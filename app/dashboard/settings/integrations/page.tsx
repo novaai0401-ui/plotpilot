@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
+import { developerToolsEnabled } from "@/lib/developer-tools";
 import { prisma } from "@/lib/db/prisma";
 import { describeScopes } from "@/lib/auth/oauth-scopes";
 import { IntegrationsList } from "./list";
@@ -11,6 +13,7 @@ import { IntegrationsList } from "./list";
  * can audit what each app actually does.
  */
 export default async function IntegrationsPage() {
+  if (!developerToolsEnabled()) notFound();
   const user = await requireUser(BROKER_ROLES);
 
   const tokens = await prisma.accessToken.findMany({

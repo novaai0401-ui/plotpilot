@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { buildWaMeUrl } from "@/lib/whatsapp";
+import { formatDateTime } from "@/lib/i18n/format";
+import { t, getLocale } from "@/lib/i18n/server";
 import {
   TkxCard,
   TkxCardBody,
@@ -12,6 +14,7 @@ import {
 
 export default async function PortalHome() {
   const user = await requireUser(["client"]);
+  const locale = getLocale();
   const [upcomingVisits, agent, org] = await Promise.all([
     prisma.visit.findMany({
       where: { clientId: user.id, status: "scheduled" },
@@ -28,23 +31,29 @@ export default async function PortalHome() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Hello, {user.name.split(" ")[0]}.</h1>
+      <h1 className="text-2xl font-bold">
+        {t("public.portal.hello", { name: user.name.split(" ")[0] ?? "" })}
+      </h1>
 
       <TkxCard variant="elevated" padding="md">
         <TkxCardHeader
-          title="Your broker"
-          subtitle={agent ? `${agent.name} at ${org?.name}` : org?.name}
+          title={t("public.portal.yourBroker")}
+          subtitle={
+            agent
+              ? t("public.portal.brokerAt", { name: agent.name, org: org?.name ?? "" })
+              : org?.name
+          }
         />
         <TkxCardBody>
           {agent && (
             <a
-              href={buildWaMeUrl(agent.phone, `Hi ${agent.name}, `)}
+              href={buildWaMeUrl(agent.phone, t("public.portal.waGreeting", { name: agent.name }))}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Message ${agent.name} on WhatsApp`}
+              aria-label={t("public.portal.waAria", { name: agent.name })}
             >
               <TkxButton variant="solid" colorScheme="success">
-                Message broker on WhatsApp
+                {t("public.portal.waButton")}
               </TkxButton>
             </a>
           )}
@@ -52,11 +61,11 @@ export default async function PortalHome() {
       </TkxCard>
 
       <section>
-        <h2 className="font-semibold mb-2">Upcoming visits</h2>
+        <h2 className="font-semibold mb-2">{t("public.portal.upcomingVisits")}</h2>
         <TkxCard variant="outlined" padding="none">
           <TkxCardBody>
             {upcomingVisits.length === 0 ? (
-              <TkxEmpty description="Nothing scheduled — your broker will schedule plot visits for you here." />
+              <TkxEmpty description={t("public.portal.noUpcoming")} />
             ) : (
               <div className="divide-y">
                 {upcomingVisits.map((v) => (
@@ -67,7 +76,8 @@ export default async function PortalHome() {
                   >
                     <div className="font-medium">{v.plot.title}</div>
                     <div className="text-gray-500">
-                      {new Date(v.scheduledAt).toLocaleString()} · with {v.agent.name}
+                      {formatDateTime(v.scheduledAt, locale)} ·{" "}
+                      {t("public.portal.withAgent", { name: v.agent.name })}
                     </div>
                   </Link>
                 ))}

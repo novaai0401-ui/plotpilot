@@ -22,6 +22,16 @@ export default function LoginPage() {
     signingIn: t("login.signingIn"),
     noOrg: t("login.noOrg"),
     startFree: t("login.startFree"),
+    failed: t("public.login.failed"),
+    genericError: t("common.somethingWrong"),
+    mfaTitle: t("public.login.mfaTitle"),
+    mfaSubtitle: t("public.login.mfaSubtitle"),
+    mfaFormLabel: t("public.login.mfaFormLabel"),
+    codeLabel: t("public.login.codeLabel"),
+    codeHint: t("public.login.codeHint"),
+    verify: t("public.login.verify"),
+    verifying: t("public.login.verifying"),
+    differentAccount: t("public.login.differentAccount"),
   };
   return (
     <Suspense>

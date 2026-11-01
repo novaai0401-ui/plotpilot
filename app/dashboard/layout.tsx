@@ -1,4 +1,5 @@
-import { requireUser, BROKER_ROLES } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
+import { getSessionUser, requireUser, BROKER_ROLES } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { SignOutButton } from "@/components/sign-out-button";
 import { t, getLocale } from "@/lib/i18n/server";
@@ -6,6 +7,7 @@ import { LocalePicker } from "@/components/i18n/locale-picker";
 import { ThemePicker } from "@/components/theme-picker";
 import { getThemeMode } from "@/lib/theme";
 import { DashboardNav, type DashboardNavItem } from "@/components/dashboard-nav";
+import { ActivityTracker } from "@/components/insights/activity-tracker";
 
 /**
  * Sidebar nav. Labels come from the i18n dictionary; `i18nKey` is the dict key,
@@ -22,6 +24,7 @@ const NAV: Array<{ href: string; i18nKey: string; isInbox?: boolean }> = [
   { href: "/dashboard/visits", i18nKey: "nav.visits" },
   { href: "/dashboard/messages", i18nKey: "nav.messages" },
   { href: "/dashboard/designs", i18nKey: "nav.designs" },
+  { href: "/dashboard/insights", i18nKey: "nav.insights" },
   { href: "/dashboard/analytics", i18nKey: "nav.analytics" },
   { href: "/dashboard/audit-log", i18nKey: "nav.auditLog" },
   { href: "/dashboard/team", i18nKey: "nav.team" },
@@ -30,6 +33,11 @@ const NAV: Array<{ href: string; i18nKey: string; isInbox?: boolean }> = [
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Login always lands here, so send other roles to their own home.
+  const session = await getSessionUser();
+  if (session?.role === "client") redirect("/portal");
+  if (session?.role === "super_admin") redirect("/admin");
+
   const user = await requireUser(BROKER_ROLES);
   const [org, unreadCount] = await Promise.all([
     prisma.organization.findUnique({ where: { id: user.orgId } }),
@@ -46,13 +54,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }));
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-screen flex flex-col md:flex-row bg-gray-50">
+      {org?.behaviorTrackingEnabled && <ActivityTracker />}
       <aside
-        className="w-60 bg-white border-r flex flex-col"
-        aria-label="Dashboard sidebar"
+        className="w-full md:w-60 md:shrink-0 bg-white border-b md:border-b-0 md:border-r flex flex-col"
+        aria-label={t("common.aria.sidebar")}
       >
         <div className="p-4 border-b">
-          <div className="text-xs uppercase text-gray-400">Organization</div>
+          <div className="text-xs uppercase text-gray-400">{t("common.organization")}</div>
           <div className="font-semibold truncate">{org?.name}</div>
         </div>
 
@@ -60,10 +69,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <section
           className="p-3 border-t text-xs space-y-2"
-          aria-label="Account and preferences"
+          aria-label={t("common.aria.account")}
         >
           <div className="font-medium">{user.name}</div>
-          <div className="text-gray-500">{user.role}</div>
+          <div className="text-gray-500">{t(`role.${user.role}`)}</div>
           <div className="flex items-center justify-between pt-1 gap-2">
             <LocalePicker current={locale} />
             <ThemePicker current={themeMode} />
@@ -73,7 +82,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </section>
       </aside>
-      <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+      <main className="flex-1 min-w-0 p-4 md:p-6 overflow-y-auto">{children}</main>
     </div>
   );
 }

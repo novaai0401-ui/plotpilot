@@ -17,11 +17,13 @@ import type { LlmKind } from "./models";
  *                a month, plus we want re-asks of stale matches to refresh.
  *   - valuation: 60 days. Market conditions drift; we don't want a 6-month-
  *                old AI valuation to look authoritative.
+ *   - insight:   1 day. Answers reflect live figures, so they age quickly.
  */
 
 const TTL_DAYS: Record<LlmKind, number> = {
   pitch: 30,
   valuation: 60,
+  insight: 1,
 };
 
 export type CachedValue<T> = { value: T; cacheHit: true } | { cacheHit: false };

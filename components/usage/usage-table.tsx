@@ -1,5 +1,7 @@
 "use client";
 import { TkxTable, type ColumnDef } from "@/components/tkx-dyn";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 
 export type UsageRow = {
   kind: string;
@@ -10,26 +12,28 @@ export type UsageRow = {
   projectedCents: number;
 };
 
-const columns: ColumnDef<UsageRow>[] = [
-  { key: "label", header: "Service", width: "35%" },
-  {
-    key: "units",
-    header: "Used",
-    render: (_v, row) => `${row.units.toLocaleString()} ${row.unitLabel}`,
-  },
-  {
-    key: "cents",
-    header: "Cost (MTD)",
-    render: (v) => `$${((v as number) / 100).toFixed(3)}`,
-  },
-  {
-    key: "projectedCents",
-    header: "Projected EoM",
-    render: (v) => <span style={{ color: "#6b7280" }}>${((v as number) / 100).toFixed(2)}</span>,
-  },
-];
-
 export function UsageTable({ rows }: { rows: UsageRow[] }) {
+  const t = useT();
+  const locale = useLocale();
+  const columns: ColumnDef<UsageRow>[] = [
+    { key: "label", header: t("account.usage.colService"), width: "35%" },
+    {
+      key: "units",
+      header: t("account.usage.colUsed"),
+      render: (_v, row) => `${formatNumber(row.units, locale)} ${row.unitLabel}`,
+    },
+    {
+      key: "cents",
+      header: t("account.usage.colCost"),
+      render: (v) => `$${((v as number) / 100).toFixed(3)}`,
+    },
+    {
+      key: "projectedCents",
+      header: t("account.usage.colProjected"),
+      render: (v) => <span style={{ color: "#6b7280" }}>${((v as number) / 100).toFixed(2)}</span>,
+    },
+  ];
+
   return (
     <TkxTable
       columns={columns}
@@ -37,7 +41,7 @@ export function UsageTable({ rows }: { rows: UsageRow[] }) {
       striped
       compact
       bordered
-      caption="Per-service usage and cost (this month)"
+      caption={t("account.usage.tableCaption")}
     />
   );
 }

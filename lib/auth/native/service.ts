@@ -22,6 +22,17 @@ const FAILED_LOGIN_THRESHOLD = 8;
 const LOCKOUT_MINUTES = 15;
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Failures carry an i18n key, not text. The route (or page) translates it for
+ * the request's locale.
+ */
+export type AuthFailure = {
+  ok: false;
+  errorKey: string;
+  errorVars?: Record<string, string | number>;
+  status: number;
+};
+
 // ─── Signup ───────────────────────────────────────────────────────────────────
 
 export type SignupInput = {
@@ -38,20 +49,20 @@ export type SignupInput = {
 
 export type SignupResult =
   | { ok: true; userId: string; orgId: string; role: string; emailVerificationToken: string }
-  | { ok: false; error: string; status: number };
+  | AuthFailure;
 
 export async function signup(input: SignupInput): Promise<SignupResult> {
   const email = input.email.trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, error: "Valid email required.", status: 400 };
+    return { ok: false, errorKey: "public.err.invalidEmail", status: 400 };
   }
   if (!input.password || input.password.length < 8) {
-    return { ok: false, error: "Password must be at least 8 characters.", status: 400 };
+    return { ok: false, errorKey: "public.err.passwordShort", status: 400 };
   }
   // Reject obvious duplicates early. We still race-guard via the unique constraint below.
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    return { ok: false, error: "An account with that email already exists.", status: 409 };
+    return { ok: false, errorKey: "public.err.emailExists", status: 409 };
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -72,7 +83,9 @@ export async function signup(input: SignupInput): Promise<SignupResult> {
     teamToken: input.teamToken,
   };
   const provisioned = await provisionUser(provisionInput);
-  if (!provisioned.ok) return { ok: false, error: provisioned.error, status: provisioned.status };
+  if (!provisioned.ok) {
+    return { ok: false, ...provisionErrorKey(provisioned.error), status: provisioned.status };
+  }
 
   // Credential + email-verification token in one transaction so a crash mid-way
   // can't leave a user without a credential row.
@@ -124,7 +137,7 @@ export type LoginInput = {
 export type LoginResult =
   | { ok: true; userId: string; mfaRequired: false }
   | { ok: true; userId: string; mfaRequired: true; pendingMfaToken: string }
-  | { ok: false; error: string; status: number };
+  | AuthFailure;
 
 /**
  * MFA-pending challenge state. The user has cleared password but not the
@@ -147,7 +160,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   });
   if (!user || !user.credential) {
     // Same error for unknown email + wrong password — don't leak account existence.
-    return { ok: false, error: "Email or password is incorrect.", status: 401 };
+    return { ok: false, errorKey: "public.err.badCredentials", status: 401 };
   }
 
   const cred = user.credential;
@@ -155,7 +168,8 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     const mins = Math.ceil((cred.lockedUntil.getTime() - Date.now()) / 60_000);
     return {
       ok: false,
-      error: `Account locked due to too many failed attempts. Try again in ~${mins} minute(s).`,
+      errorKey: "public.err.accountLocked",
+      errorVars: { mins },
       status: 429,
     };
   }
@@ -169,7 +183,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       updates.failedLoginCount = 0;
     }
     await prisma.authCredential.update({ where: { id: cred.id }, data: updates });
-    return { ok: false, error: "Email or password is incorrect.", status: 401 };
+    return { ok: false, errorKey: "public.err.badCredentials", status: 401 };
   }
 
   // Success path — reset counters. Re-hash with current params if needed.
@@ -216,9 +230,7 @@ export type CompleteMfaInput = {
   userAgent?: string;
 };
 
-export type CompleteMfaResult =
-  | { ok: true; userId: string }
-  | { ok: false; error: string; status: number };
+export type CompleteMfaResult = { ok: true; userId: string } | AuthFailure;
 
 export async function completeMfaChallenge(input: CompleteMfaInput): Promise<CompleteMfaResult> {
   const tokenHash = hashTokenSha256(input.pendingMfaToken);
@@ -227,11 +239,11 @@ export async function completeMfaChallenge(input: CompleteMfaInput): Promise<Com
     include: { user: { include: { credential: true } } },
   });
   if (!pending || pending.status !== "active" || pending.expiresAt < new Date()) {
-    return { ok: false, error: "Login challenge expired. Sign in again.", status: 400 };
+    return { ok: false, errorKey: "public.err.challengeExpired", status: 400 };
   }
   const cred = pending.user.credential;
   if (!cred || !cred.mfaSecret) {
-    return { ok: false, error: "MFA is not enrolled for this account.", status: 400 };
+    return { ok: false, errorKey: "public.err.mfaNotEnrolled", status: 400 };
   }
 
   const code = input.code.trim();
@@ -255,7 +267,7 @@ export async function completeMfaChallenge(input: CompleteMfaInput): Promise<Com
   }
 
   if (!accepted) {
-    return { ok: false, error: "Code is invalid or expired.", status: 401 };
+    return { ok: false, errorKey: "public.err.codeInvalid", status: 401 };
   }
 
   // Consume the pending challenge and mint a full session.
@@ -280,12 +292,12 @@ export async function completeMfaChallenge(input: CompleteMfaInput): Promise<Com
 
 // ─── Email verification ──────────────────────────────────────────────────────
 
-export async function verifyEmail(rawToken: string): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+export async function verifyEmail(rawToken: string): Promise<{ ok: true; userId: string } | { ok: false; errorKey: string }> {
   const tokenHash = hashTokenSha256(rawToken);
   const row = await prisma.emailVerification.findUnique({ where: { tokenHash } });
-  if (!row) return { ok: false, error: "Invalid or already-used verification link." };
-  if (row.usedAt) return { ok: false, error: "This verification link was already used." };
-  if (row.expiresAt < new Date()) return { ok: false, error: "Verification link expired." };
+  if (!row) return { ok: false, errorKey: "public.verify.invalidLink" };
+  if (row.usedAt) return { ok: false, errorKey: "public.verify.usedLink" };
+  if (row.expiresAt < new Date()) return { ok: false, errorKey: "public.verify.expiredLink" };
   await prisma.$transaction([
     prisma.emailVerification.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
     prisma.authCredential.updateMany({
@@ -297,6 +309,22 @@ export async function verifyEmail(rawToken: string): Promise<{ ok: true; userId:
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** provisionUser is shared with other callers, so it still returns English. */
+function provisionErrorKey(error: string): Pick<AuthFailure, "errorKey" | "errorVars"> {
+  if (error.startsWith("Team invite:")) return { errorKey: "public.err.teamInviteInvalid" };
+  const mismatch = error.match(/^This invite was issued to (.+), but you're signed in as (.+)\.$/);
+  if (mismatch) {
+    return {
+      errorKey: "public.err.inviteEmailMismatch",
+      errorVars: { invited: mismatch[1]!, email: mismatch[2]! },
+    };
+  }
+  if (error === "Invalid or expired invite") return { errorKey: "public.err.inviteInvalid" };
+  if (error === "Missing name or phone") return { errorKey: "public.err.missingNamePhone" };
+  if (error.startsWith("Missing orgName")) return { errorKey: "public.err.missingOrgName" };
+  return { errorKey: "common.somethingWrong" };
+}
 
 async function sendVerificationEmail(toEmail: string, toName: string, rawToken: string): Promise<void> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

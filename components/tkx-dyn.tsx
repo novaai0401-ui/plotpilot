@@ -36,6 +36,11 @@ export {
   TkxStatistic,
   TkxEmpty,
   TkxTable,
+  TkxSegmented,
+  TkxProgress,
+  TkxAvatar,
+  TkxGauge,
+  TkxSparkline,
   useToast,
 } from "tekivex-ui";
 

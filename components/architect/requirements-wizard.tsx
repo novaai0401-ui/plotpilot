@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { csrfFetch } from "@/lib/security/csrf-fetch";
 import { useRouter } from "next/navigation";
 import {
   TkxStepper,
@@ -17,6 +18,8 @@ import {
   type SelectOption,
 } from "@/components/tkx-dyn";
 import { UpgradeModal, type CapInfo } from "@/components/billing/upgrade-modal";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 
 type WizardProps = {
   source: "broker" | "client" | "public_lead" | "standalone";
@@ -25,35 +28,41 @@ type WizardProps = {
   onComplete?: (designId: string) => void;
 };
 
-const STEPS = [
-  { id: "project", title: "Project", description: "Type & purpose" },
-  { id: "plot", title: "Plot", description: "Size & rules" },
-  { id: "layout", title: "Layout", description: "Rooms & floors" },
-  { id: "amenities", title: "Amenities", description: "Add-ons" },
-  { id: "style", title: "Style", description: "Look & feel" },
-  { id: "review", title: "Review", description: "Generate" },
+const PROJECT_TYPES = [
+  "residential_house", "residential_apartment", "commercial_office", "commercial_retail", "mixed_use",
 ];
-
-const PROJECT_TYPE_OPTIONS: SelectOption[] = [
-  { value: "residential_house", label: "Residential — standalone house / villa" },
-  { value: "residential_apartment", label: "Residential — apartment building" },
-  { value: "commercial_office", label: "Commercial — office" },
-  { value: "commercial_retail", label: "Commercial — retail / shop" },
-  { value: "mixed_use", label: "Mixed-use (retail + residential)" },
-];
-
-const FACING_OPTIONS: SelectOption[] = ["N", "E", "S", "W", "NE", "NW", "SE", "SW"].map((v) => ({ value: v, label: v }));
-const STYLE_OPTIONS: SelectOption[] = [
+const FACINGS = ["N", "E", "S", "W", "NE", "NW", "SE", "SW"];
+const STYLES = [
   "modern", "contemporary", "traditional", "minimalist", "industrial", "mediterranean", "colonial",
-].map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
-const CLIMATE_OPTIONS: SelectOption[] = [
-  "tropical", "temperate", "arid", "cold", "humid",
-].map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
+];
+const CLIMATES = ["tropical", "temperate", "arid", "cold", "humid"];
 
 export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete }: WizardProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const [activeStep, setActiveStep] = useState(0);
+
+  const { STEPS, PROJECT_TYPE_OPTIONS, FACING_OPTIONS, STYLE_OPTIONS, CLIMATE_OPTIONS } = useMemo(() => {
+    const options = (values: string[], prefix: string): SelectOption[] =>
+      values.map((value) => ({ value, label: t(`${prefix}.${value}`) }));
+    return {
+      STEPS: [
+        // No "&" in any language: TkxStepper escapes it and shows a literal "&amp;".
+        { id: "project", title: t("design.wizard.step.project.title"), description: t("design.wizard.step.project.desc") },
+        { id: "plot", title: t("common.plot"), description: t("design.wizard.step.plot.desc") },
+        { id: "layout", title: t("design.wizard.step.layout.title"), description: t("design.wizard.step.layout.desc") },
+        { id: "amenities", title: t("design.wizard.step.amenities.title"), description: t("design.wizard.step.amenities.desc") },
+        { id: "style", title: t("design.wizard.step.style.title"), description: t("design.wizard.step.style.desc") },
+        { id: "review", title: t("design.wizard.step.review.title"), description: t("design.wizard.step.review.desc") },
+      ],
+      PROJECT_TYPE_OPTIONS: options(PROJECT_TYPES, "design.projectType"),
+      FACING_OPTIONS: options(FACINGS, "design.facing"),
+      STYLE_OPTIONS: options(STYLES, "design.style"),
+      CLIMATE_OPTIONS: options(CLIMATES, "design.climate"),
+    };
+  }, [t]);
 
   // Form state
   const [projectType, setProjectType] = useState("residential_house");
@@ -167,7 +176,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
   async function onSubmit() {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/architect/generate", {
+      const res = await csrfFetch("/api/architect/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -188,13 +197,13 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
           setCapInfo(j.cap);
           return;
         }
-        throw new Error(j.error || "Generation failed");
+        throw new Error(j.error || t("design.wizard.failed"));
       }
-      toast({ title: "Design generated!", variant: "success" });
+      toast({ title: t("design.wizard.generated"), variant: "success" });
       if (onComplete) return onComplete(j.id);
       router.push(`/designs/${j.id}`);
     } catch (e: any) {
-      toast({ title: "Generation failed", description: e.message, variant: "danger" });
+      toast({ title: t("design.wizard.failed"), description: e.message, variant: "danger" });
     } finally {
       setSubmitting(false);
     }
@@ -207,7 +216,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
       <UpgradeModal open={capInfo !== null} onClose={() => setCapInfo(null)} cap={capInfo} />
 
       <TkxCard variant="elevated" padding="lg">
-        <TkxCardHeader title="Design a building" subtitle="Walk through six steps; the engine handles the rest." />
+        <TkxCardHeader title={t("design.wizard.title")} subtitle={t("design.wizard.subtitle")} />
         <TkxCardBody>
           {/*
             Keyboard story:
@@ -220,7 +229,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
           */}
           <form
             noValidate
-            aria-label="Building design wizard"
+            aria-label={t("design.wizard.formLabel")}
             onSubmit={(e) => {
               e.preventDefault();
               if (activeStep < STEPS.length - 1) {
@@ -230,20 +239,26 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
               }
             }}
           >
-          <TkxStepper
-            steps={STEPS.map((s, i) => ({
-              id: s.id,
-              title: s.title,
-              description: s.description,
-              status: i < activeStep ? "completed" : i === activeStep ? "active" : "pending",
-            }))}
-            activeStep={activeStep}
-            clickable
-            onStepClick={(i) => setActiveStep(i)}
-            variant="default"
-            connector="solid"
-            size="md"
-          />
+          {/* Step descriptions are shown below, for the current step only: all six
+              overlap once translated or on a phone. Narrow screens scroll sideways. */}
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 520 }}>
+              <TkxStepper
+                steps={STEPS.map((s, i) => ({
+                  id: s.id,
+                  title: s.title,
+                  status: i < activeStep ? "completed" : i === activeStep ? "active" : "pending",
+                }))}
+                activeStep={activeStep}
+                clickable
+                onStepClick={(i) => setActiveStep(i)}
+                variant="default"
+                connector="solid"
+                size="md"
+              />
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mt-2">{STEPS[activeStep].description}</p>
 
           {/* Hidden focus target + live region. The heading is sr-only but
               focusable (tabIndex=-1) so the focus ring isn't visible. The
@@ -254,7 +269,12 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             className="sr-only"
             aria-live="polite"
           >
-            {`Step ${activeStep + 1} of ${STEPS.length}: ${STEPS[activeStep].title} — ${STEPS[activeStep].description}`}
+            {t("design.wizard.stepHeading", {
+              current: activeStep + 1,
+              total: STEPS.length,
+              title: STEPS[activeStep].title,
+              description: STEPS[activeStep].description,
+            })}
           </h2>
 
           <div
@@ -265,7 +285,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {/* STEP 0 — Project type */}
             {activeStep === 0 && (
               <TkxSelect
-                label="Project type"
+                label={t("design.wizard.projectType")}
                 options={PROJECT_TYPE_OPTIONS}
                 value={projectType}
                 onChange={(v) => setProjectType(v as string)}
@@ -277,15 +297,15 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <TkxNumberInput
-                    label="Total plot area (sqft)"
+                    label={t("design.wizard.totalArea")}
                     value={totalSqft}
                     onChange={(v) => setTotalSqft(v ?? 0)}
                     min={200}
                     max={500_000}
-                    suffix=" sqft"
+                    suffix={` ${t("design.sqft")}`}
                   />
                   <TkxSelect
-                    label="Facing"
+                    label={t("design.wizard.facing")}
                     options={FACING_OPTIONS}
                     value={facing}
                     onChange={(v) => setFacing(v as string)}
@@ -293,14 +313,14 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <TkxNumberInput
-                    label="Frontage (ft) — optional"
+                    label={t("design.wizard.frontage")}
                     value={frontageFt ?? undefined}
                     onChange={(v) => setFrontageFt(v)}
                     min={10}
                     max={2000}
                   />
                   <TkxNumberInput
-                    label="Depth (ft) — optional"
+                    label={t("design.wizard.depth")}
                     value={depthFt ?? undefined}
                     onChange={(v) => setDepthFt(v)}
                     min={10}
@@ -308,10 +328,10 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                   />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-                  <TkxNumberInput label="FAR cap" value={maxFAR} onChange={(v) => setMaxFAR(v ?? 2)} step={0.1} min={0.5} max={10} precision={1} />
-                  <TkxNumberInput label="Setback front (ft)" value={setbackFront} onChange={(v) => setSetbackFront(v ?? 5)} min={0} max={50} />
-                  <TkxNumberInput label="Setback rear (ft)" value={setbackRear} onChange={(v) => setSetbackRear(v ?? 3)} min={0} max={50} />
-                  <TkxNumberInput label="Setback sides (ft)" value={setbackSide} onChange={(v) => setSetbackSide(v ?? 3)} min={0} max={50} />
+                  <TkxNumberInput label={t("design.wizard.farCap")} value={maxFAR} onChange={(v) => setMaxFAR(v ?? 2)} step={0.1} min={0.5} max={10} precision={1} />
+                  <TkxNumberInput label={t("design.wizard.setbackFront")} value={setbackFront} onChange={(v) => setSetbackFront(v ?? 5)} min={0} max={50} />
+                  <TkxNumberInput label={t("design.wizard.setbackRear")} value={setbackRear} onChange={(v) => setSetbackRear(v ?? 3)} min={0} max={50} />
+                  <TkxNumberInput label={t("design.wizard.setbackSide")} value={setbackSide} onChange={(v) => setSetbackSide(v ?? 3)} min={0} max={50} />
                 </div>
               </div>
             )}
@@ -320,43 +340,43 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {activeStep === 2 && (
               <div style={{ display: "grid", gap: 16 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <TkxNumberInput label="Number of floors" value={floors} onChange={(v) => setFloors(v ?? 1)} min={1} max={50} />
+                  <TkxNumberInput label={t("design.wizard.floors")} value={floors} onChange={(v) => setFloors(v ?? 1)} min={1} max={50} />
                   {projectType === "residential_apartment" && (
-                    <TkxNumberInput label="Units per floor" value={unitsPerFloor} onChange={(v) => setUnitsPerFloor(v ?? 1)} min={1} max={50} />
+                    <TkxNumberInput label={t("design.wizard.unitsPerFloor")} value={unitsPerFloor} onChange={(v) => setUnitsPerFloor(v ?? 1)} min={1} max={50} />
                   )}
                 </div>
 
                 {!isCommercial && (
                   <div>
-                    <SectionTitle>Residential rooms {projectType === "residential_apartment" ? "(per unit)" : ""}</SectionTitle>
+                    <SectionTitle>{t("design.wizard.residentialRooms")} {projectType === "residential_apartment" ? t("design.wizard.perUnit") : ""}</SectionTitle>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                      <TkxNumberInput label="Bedrooms" value={bedrooms} onChange={(v) => setBedrooms(v ?? 0)} min={0} max={10} />
-                      <TkxNumberInput label="Bathrooms" value={bathrooms} onChange={(v) => setBathrooms(v ?? 0)} min={0} max={10} />
-                      <TkxNumberInput label="Living rooms" value={livingRooms} onChange={(v) => setLivingRooms(v ?? 0)} min={0} max={3} />
-                      <TkxNumberInput label="Study rooms" value={studyRooms} onChange={(v) => setStudyRooms(v ?? 0)} min={0} max={3} />
-                      <TkxNumberInput label="Pooja rooms" value={poojaRooms} onChange={(v) => setPoojaRooms(v ?? 0)} min={0} max={2} />
+                      <TkxNumberInput label={t("design.wizard.bedrooms")} value={bedrooms} onChange={(v) => setBedrooms(v ?? 0)} min={0} max={10} />
+                      <TkxNumberInput label={t("design.wizard.bathrooms")} value={bathrooms} onChange={(v) => setBathrooms(v ?? 0)} min={0} max={10} />
+                      <TkxNumberInput label={t("design.wizard.livingRooms")} value={livingRooms} onChange={(v) => setLivingRooms(v ?? 0)} min={0} max={3} />
+                      <TkxNumberInput label={t("design.wizard.studyRooms")} value={studyRooms} onChange={(v) => setStudyRooms(v ?? 0)} min={0} max={3} />
+                      <TkxNumberInput label={t("design.wizard.poojaRooms")} value={poojaRooms} onChange={(v) => setPoojaRooms(v ?? 0)} min={0} max={2} />
                     </div>
                   </div>
                 )}
 
                 {(isCommercial || isMixed) && (
                   <div>
-                    <SectionTitle>Commercial spaces</SectionTitle>
+                    <SectionTitle>{t("design.wizard.commercialSpaces")}</SectionTitle>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                      <TkxNumberInput label="Workstations" value={workstations} onChange={(v) => setWorkstations(v ?? 0)} min={0} max={2000} step={5} />
-                      <TkxNumberInput label="Cabins" value={cabins} onChange={(v) => setCabins(v ?? 0)} min={0} max={50} />
-                      <TkxNumberInput label="Meeting rooms" value={meetingRooms} onChange={(v) => setMeetingRooms(v ?? 0)} min={0} max={20} />
-                      <TkxNumberInput label="Retail units" value={retailUnits} onChange={(v) => setRetailUnits(v ?? 0)} min={0} max={50} />
-                      <TkxCheckbox label="Cafeteria" checked={cafeteria} onChange={(e) => setCafeteria(e.target.checked)} />
+                      <TkxNumberInput label={t("design.wizard.workstations")} value={workstations} onChange={(v) => setWorkstations(v ?? 0)} min={0} max={2000} step={5} />
+                      <TkxNumberInput label={t("design.wizard.cabins")} value={cabins} onChange={(v) => setCabins(v ?? 0)} min={0} max={50} />
+                      <TkxNumberInput label={t("design.wizard.meetingRooms")} value={meetingRooms} onChange={(v) => setMeetingRooms(v ?? 0)} min={0} max={20} />
+                      <TkxNumberInput label={t("design.wizard.retailUnits")} value={retailUnits} onChange={(v) => setRetailUnits(v ?? 0)} min={0} max={50} />
+                      <TkxCheckbox label={t("design.wizard.cafeteria")} checked={cafeteria} onChange={setCafeteria} />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <SectionTitle>Parking</SectionTitle>
+                  <SectionTitle>{t("design.wizard.parking")}</SectionTitle>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <TkxNumberInput label="Car parking" value={cars} onChange={(v) => setCars(v ?? 0)} min={0} max={500} />
-                    <TkxNumberInput label="Bike parking" value={bikes} onChange={(v) => setBikes(v ?? 0)} min={0} max={500} />
+                    <TkxNumberInput label={t("design.wizard.carParking")} value={cars} onChange={(v) => setCars(v ?? 0)} min={0} max={500} />
+                    <TkxNumberInput label={t("design.wizard.bikeParking")} value={bikes} onChange={(v) => setBikes(v ?? 0)} min={0} max={500} />
                   </div>
                 </div>
               </div>
@@ -366,15 +386,15 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {activeStep === 3 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
                 {[
-                  ["Balcony", balcony, setBalcony] as const,
-                  ["Terrace", terrace, setTerrace] as const,
-                  ["Garden", garden, setGarden] as const,
-                  ["Lift", lift, setLift] as const,
-                  ["Solar PV", solar, setSolar] as const,
-                  ["Rainwater harvesting", rainwater, setRainwater] as const,
+                  [t("design.wizard.balcony"), balcony, setBalcony] as const,
+                  [t("design.wizard.terrace"), terrace, setTerrace] as const,
+                  [t("design.wizard.garden"), garden, setGarden] as const,
+                  [t("design.wizard.lift"), lift, setLift] as const,
+                  [t("design.wizard.solar"), solar, setSolar] as const,
+                  [t("design.wizard.rainwater"), rainwater, setRainwater] as const,
                 ].map(([label, val, set]) => (
                   <TkxCard key={label} variant="outlined" padding="sm">
-                    <TkxCheckbox label={label} checked={val} onChange={(e) => set(e.target.checked)} />
+                    <TkxCheckbox label={label} checked={val} onChange={set} />
                   </TkxCard>
                 ))}
               </div>
@@ -384,25 +404,25 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {activeStep === 4 && (
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <TkxSelect label="Style" options={STYLE_OPTIONS} value={style} onChange={(v) => setStyle(v as string)} />
-                  <TkxSelect label="Climate" options={CLIMATE_OPTIONS} value={climate} onChange={(v) => setClimate(v as string)} />
+                  <TkxSelect label={t("design.wizard.style")} options={STYLE_OPTIONS} value={style} onChange={(v) => setStyle(v as string)} />
+                  <TkxSelect label={t("design.wizard.climate")} options={CLIMATE_OPTIONS} value={climate} onChange={(v) => setClimate(v as string)} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                   <TkxCard variant="outlined" padding="sm">
-                    <TkxCheckbox label="Vastu compliant" checked={vastuCompliant} onChange={(e) => setVastuCompliant(e.target.checked)} />
+                    <TkxCheckbox label={t("design.wizard.vastu")} checked={vastuCompliant} onChange={setVastuCompliant} />
                   </TkxCard>
                   <TkxCard variant="outlined" padding="sm">
-                    <TkxCheckbox label="Accessibility" checked={accessibility} onChange={(e) => setAccessibility(e.target.checked)} />
+                    <TkxCheckbox label={t("design.wizard.accessibility")} checked={accessibility} onChange={setAccessibility} />
                   </TkxCard>
                   <TkxCard variant="outlined" padding="sm">
-                    <TkxCheckbox label="Sustainable build" checked={sustainable} onChange={(e) => setSustainable(e.target.checked)} />
+                    <TkxCheckbox label={t("design.wizard.sustainable")} checked={sustainable} onChange={setSustainable} />
                   </TkxCard>
                 </div>
                 <TkxInput
-                  label="Notes for the AI (optional)"
+                  label={t("design.wizard.notes")}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  hint="Anything special — accessibility needs, plot constraints, design references."
+                  hint={t("design.wizard.notesHint")}
                 />
               </div>
             )}
@@ -411,16 +431,16 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
             {activeStep === 5 && (
               <div style={{ display: "grid", gap: 16 }}>
                 {source === "public_lead" && (
-                  <TkxAlert variant="info" title="Contact details">
-                    Share these so a broker in your area can follow up. We'll never spam you.
+                  <TkxAlert variant="info" title={t("design.wizard.contactTitle")}>
+                    {t("design.wizard.contactBody")}
                     <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        <TkxInput label="Name" value={leadName} onChange={(e) => setLeadName(e.target.value)} isRequired />
-                        <TkxInput label="Phone" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} placeholder="+91…" isRequired />
+                        <TkxInput label={t("common.name")} value={leadName} onChange={(e) => setLeadName(e.target.value)} isRequired />
+                        <TkxInput label={t("common.phone")} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} placeholder="+91…" isRequired />
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        <TkxInput label="Email" type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} />
-                        <TkxInput label="City" value={leadCity} onChange={(e) => setLeadCity(e.target.value)} placeholder="e.g. Bangalore" isRequired />
+                        <TkxInput label={t("common.email")} type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} />
+                        <TkxInput label={t("common.city")} value={leadCity} onChange={(e) => setLeadCity(e.target.value)} placeholder={t("design.wizard.cityPlaceholder")} isRequired />
                       </div>
                       <TkxButton
                         variant="ghost"
@@ -434,38 +454,43 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                           );
                         }}
                       >
-                        {leadCoords ? "✓ Location shared (matches nearby brokers)" : "Share my location (optional)"}
+                        {leadCoords ? `✓ ${t("design.wizard.locationShared")}` : t("design.wizard.shareLocation")}
                       </TkxButton>
                     </div>
                   </TkxAlert>
                 )}
 
                 <TkxCard variant="outlined" padding="md">
-                  <SectionTitle>Summary</SectionTitle>
+                  <SectionTitle>{t("design.wizard.summary")}</SectionTitle>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-                    <TkxBadge variant="primary" outlined>{projectType.replace(/_/g, " ")}</TkxBadge>
-                    <TkxBadge variant="info" outlined>{totalSqft.toLocaleString()} sqft</TkxBadge>
+                    <TkxBadge variant="primary" outlined>{t(`design.projectTypeShort.${projectType}`)}</TkxBadge>
+                    <TkxBadge variant="info" outlined>{t("design.sqftValue", { value: formatNumber(totalSqft, locale) })}</TkxBadge>
                     <TkxBadge variant="info" outlined>FAR {maxFAR}</TkxBadge>
-                    <TkxBadge variant="info" outlined>facing {facing}</TkxBadge>
+                    <TkxBadge variant="info" outlined>{t("design.wizard.summary.facing", { facing: t(`design.facing.${facing}`) })}</TkxBadge>
                     <TkxBadge variant="success" outlined>
-                      {floors} floor{floors > 1 ? "s" : ""}
-                      {projectType === "residential_apartment" ? ` × ${unitsPerFloor} units` : ""}
+                      {t(floors > 1 ? "design.wizard.summary.floors" : "design.wizard.summary.floor", { count: floors })}
+                      {projectType === "residential_apartment" ? ` × ${t("design.wizard.summary.units", { count: unitsPerFloor })}` : ""}
                     </TkxBadge>
                   </div>
                   {!isCommercial && (
                     <div style={{ fontSize: 13, color: "#4b5563" }}>
-                      {bedrooms} BR · {bathrooms} BA · {livingRooms} LR
-                      {poojaRooms ? ` · ${poojaRooms} pooja` : ""}
-                      {studyRooms ? ` · ${studyRooms} study` : ""}
+                      {t("design.wizard.summary.rooms", { bedrooms, bathrooms, living: livingRooms })}
+                      {poojaRooms ? ` · ${t("design.wizard.summary.pooja", { count: poojaRooms })}` : ""}
+                      {studyRooms ? ` · ${t("design.wizard.summary.study", { count: studyRooms })}` : ""}
                     </div>
                   )}
                   {(isCommercial || isMixed) && (
                     <div style={{ fontSize: 13, color: "#4b5563" }}>
-                      {workstations} workstations · {cabins} cabins · {meetingRooms} meetings
-                      {retailUnits ? ` · ${retailUnits} retail` : ""}
+                      {t("design.wizard.summary.commercial", { workstations, cabins, meetings: meetingRooms })}
+                      {retailUnits ? ` · ${t("design.wizard.summary.retail", { count: retailUnits })}` : ""}
                     </div>
                   )}
-                  <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>{style}, {climate} climate</div>
+                  <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                    {t("design.wizard.summary.styleClimate", {
+                      style: t(`design.style.${style}`).toLowerCase(),
+                      climate: t(`design.climate.${climate}`).toLowerCase(),
+                    })}
+                  </div>
                 </TkxCard>
               </div>
             )}
@@ -479,7 +504,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
               disabled={activeStep === 0}
               onClick={() => setActiveStep((s) => s - 1)}
             >
-              ← Back
+              ← {t("common.back")}
             </TkxButton>
             {activeStep < STEPS.length - 1 ? (
               <TkxButton
@@ -488,7 +513,7 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                 colorScheme="primary"
                 onClick={() => setActiveStep((s) => s + 1)}
               >
-                Next →
+                {t("common.next")} →
               </TkxButton>
             ) : (
               <TkxButton
@@ -497,18 +522,18 @@ export function RequirementsWizard({ source, plotId, defaultPlotSqft, onComplete
                 colorScheme="primary"
                 size="lg"
                 isLoading={submitting}
-                loadingText="Generating design (~30s)…"
+                loadingText={t("design.wizard.generating")}
                 disabled={!canSubmit}
                 aria-describedby={canSubmit ? undefined : "wizard-cannot-submit"}
                 glow
               >
-                Generate design
+                {t("design.wizard.generate")}
               </TkxButton>
             )}
           </div>
           {!canSubmit && (
             <p id="wizard-cannot-submit" className="sr-only">
-              Fill in name and phone in the review step before generating.
+              {t("design.wizard.cannotSubmit")}
             </p>
           )}
           </form>
